@@ -103,6 +103,12 @@ initSession = do
 {# fun session_free as freeSession
   { id `Session' } -> `Int' #}
 
+{# fun session_disconnect_ex as disconnectSessionEx
+  { id `Session', `Int', `String', `String' } -> `Int' #}
+
+disconnectSession :: Session -> String -> IO Int
+disconnectSession s msg = disconnectSessionEx s 11 msg ""
+
 {# fun session_handshake as handshake
   { id `Session', ssh2socket `Socket' } -> `Int' #}
 
@@ -168,7 +174,10 @@ readChannel c sz = readChannelEx c 0 sz
 {# fun channel_close as closeChannel
   { id `Channel' } -> `Int' #}
 
-{# fun session_block_direction as blockedDirections
+{# fun channel_free as freeChannel
+  { id `Channel' } -> `Int' #}
+
+{# fun session_block_directions as blockedDirections
   { id `Session' } -> `[Direction]' int2dir #}
 
 peekCStringPtr :: Ptr CString -> IO String
