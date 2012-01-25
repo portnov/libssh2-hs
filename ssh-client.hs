@@ -19,4 +19,4 @@ runCommand login host port command = do
   withSSH2 known_hosts public private login host port $ \ch -> do
       channelExecute ch command
       result <- readAllChannel ch
-      print result
+      putStrLn result
