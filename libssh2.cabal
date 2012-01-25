@@ -1,0 +1,43 @@
+Name:                libssh2
+
+Version:             0.1
+
+Synopsis:            FFI bindings to libssh2 SSH2 client library (http://libssh2.org/)
+
+Description:         This package provides FFI bindings for SSH2 client library named libssh2.
+
+Homepage:            http://redmine.iportnov.ru/projects/libssh2-hs
+
+License:             BSD3
+
+License-file:        LICENSE
+
+Author:              IlyaPortnov
+
+Maintainer:          portnov84@rambler.ru
+
+-- A copyright notice.
+-- Copyright:           
+
+Category:            Network
+
+Build-type:          Simple
+
+Extra-source-files:  ssh-client.hs
+
+-- Constraint on the version of Cabal needed to build this package.
+Cabal-version:       >=1.6
+
+
+Library
+  Exposed-modules:     Network.SSH.Client.Foreign
+                       Network.SSH.Client.LibSSH2
+  
+  Build-depends:       base >= 4 && < 5, network >= 2.3
+
+  Extra-libraries:     "ssh2"
+  
+  -- Other-modules:       
+  
+  Build-tools:         c2hs
+  
