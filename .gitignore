@@ -1,0 +1,9 @@
+*.hi
+*.o
+*.chi
+*.swp
+*.chs.h
+dist/
+cabal-dev/
+Network/SSH/Client/Foreign.hs
+ssh-test
