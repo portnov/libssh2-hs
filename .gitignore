@@ -6,4 +6,4 @@
 dist/
 cabal-dev/
 Network/SSH/Client/Foreign.hs
-ssh-test
+ssh-client
