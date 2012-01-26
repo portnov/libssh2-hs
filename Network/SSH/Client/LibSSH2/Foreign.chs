@@ -89,28 +89,28 @@ ssh2socket (MkSocket s _ _ _ _) = s
 initSession :: IO Session
 initSession = do
   ptr <- {# call session_init_ex #} nullFunPtr nullFunPtr nullFunPtr nullPtr
-  return (fromPointer ptr)
+  handleNullPtr ptr
 
 {# fun session_free as freeSession
-  { toPointer `Session' } -> `Int' #}
+  { toPointer `Session' } -> `Int' handleInt* #}
 
 {# fun session_disconnect_ex as disconnectSessionEx
-  { toPointer `Session', `Int', `String', `String' } -> `Int' #}
+  { toPointer `Session', `Int', `String', `String' } -> `Int' handleInt* #}
 
 disconnectSession :: Session -> String -> IO Int
 disconnectSession s msg = disconnectSessionEx s 11 msg ""
 
 {# fun session_handshake as handshake
-  { toPointer `Session', ssh2socket `Socket' } -> `Int' #}
+  { toPointer `Session', ssh2socket `Socket' } -> `Int' handleInt* #}
 
 {# fun knownhost_init as initKnownHosts
-  { toPointer `Session' } -> `KnownHosts' fromPointer #}
+  { toPointer `Session' } -> `KnownHosts' handleNullPtr* #}
 
 {# fun knownhost_free as freeKnownHosts
   { toPointer `KnownHosts' } -> `()' #}
 
 {# fun knownhost_readfile as knownHostsReadFile_
-  { toPointer `KnownHosts', `String', id `CInt' } -> `Int' #}
+  { toPointer `KnownHosts', `String', id `CInt' } -> `Int' handleInt* #}
 
 knownHostsReadFile :: KnownHosts -> String -> IO Int
 knownHostsReadFile kh path = knownHostsReadFile_ kh path 1
@@ -131,13 +131,17 @@ checkKnownHost :: KnownHosts -> String -> Int -> String -> [KnownHostType] -> IO
 checkKnownHost kh host port key mask = checkKnownHost_ kh host port key (length key) mask nullPtr
 
 {# fun userauth_publickey_fromfile_ex as publicKeyAuthFile
-  { toPointer `Session', `String' &, `String', `String', `String' } -> `Int' #}
+  { toPointer `Session',
+    `String' &,
+    `String',
+    `String',
+    `String' } -> `Int' handleInt* #}
 
 {# fun channel_open_ex as openSessionChannelEx
   { toPointer `Session',
    `String' &,
    `Int', `Int',
-   `String' & } -> `Channel' fromPointer #}
+   `String' & } -> `Channel' handleNullPtr* #}
 
 openChannelSession :: Session -> IO Channel
 openChannelSession s = openSessionChannelEx s "session" 65536 32768 ""
@@ -145,7 +149,7 @@ openChannelSession s = openSessionChannelEx s "session" 65536 32768 ""
 {# fun channel_process_startup as channelProcess
   { toPointer `Channel',
     `String' &,
-    `String' & } -> `Int' #}
+    `String' & } -> `Int' handleInt* #}
 
 channelExecute :: Channel -> String -> IO Int
 channelExecute c command = channelProcess c "exec" command
@@ -157,22 +161,22 @@ channelShell c command = channelProcess c "shell" command
   { toPointer `Channel',
     `Int',
     alloca- `String' peekCString*,
-    `Int' } -> `Int' #}
+    `Int' } -> `Int' handleInt* #}
 
 readChannel :: Channel -> Int -> IO (Int, String)
 readChannel c sz = readChannelEx c 0 sz
 
 {# fun channel_close as closeChannel
-  { toPointer `Channel' } -> `Int' #}
+  { toPointer `Channel' } -> `Int' handleInt* #}
 
 {# fun channel_free as freeChannel
-  { toPointer `Channel' } -> `Int' #}
+  { toPointer `Channel' } -> `Int' handleInt* #}
 
 {# fun session_block_directions as blockedDirections
   { toPointer `Session' } -> `[Direction]' int2dir #}
 
 {# fun channel_get_exit_status as channelExitStatus
-  { toPointer `Channel' } -> `Int' #}
+  { toPointer `Channel' } -> `Int' handleInt* #}
 
 {# fun channel_get_exit_signal as channelExitSignal_
   { toPointer `Channel',
@@ -181,7 +185,7 @@ readChannel c sz = readChannelEx c 0 sz
     alloca- `Maybe String' peekMaybeCStringPtr*,
     castPtr `Ptr Int',
     alloca- `Maybe String' peekMaybeCStringPtr*,
-    castPtr `Ptr Int' } -> `Int' #}
+    castPtr `Ptr Int' } -> `Int' handleInt* #}
 
 channelExitSignal :: Channel -> IO (Int, String, Maybe String, Maybe String)
 channelExitSignal ch = channelExitSignal_ ch nullPtr nullPtr nullPtr
