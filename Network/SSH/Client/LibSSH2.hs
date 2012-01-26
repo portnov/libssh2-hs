@@ -1,4 +1,4 @@
-
+{-# LANGUAGE ScopedTypeVariables #-}
 module Network.SSH.Client.LibSSH2
   (-- * Types
    Session, Channel, KnownHosts,
@@ -8,16 +8,18 @@ module Network.SSH.Client.LibSSH2
    withSession,
    withChannel,
    checkHost,
-   readAllChannel
+   readAllChannel,
+   retryIfNeeded
   ) where
 
-import Control.Exception
+import Control.Exception as E
 import Network
 import Network.BSD
 import Network.Socket
 import System.IO
 
 import Network.SSH.Client.LibSSH2.Types
+import Network.SSH.Client.LibSSH2.Errors
 import Network.SSH.Client.LibSSH2.Foreign
 
 -- | Check if handle is ready for reading in 10 seconds.
@@ -39,19 +41,19 @@ socketConnect hostname port = do
 
 withSSH2 :: FilePath -> FilePath -> FilePath -> String -> String -> Int -> (Channel -> IO a) -> IO a
 withSSH2 known_hosts public private login hostname port fn =
-  withSession hostname port $ \s -> do
+  withSession hostname port $ \_ s -> do
     r <- checkHost s hostname port known_hosts
     print r
     a <- publicKeyAuthFile s login public private ""
-    print a
     withChannel s $ fn
 
-withSession :: String -> Int -> (Session -> IO a) -> IO a
+withSession :: String -> Int -> (Handle -> Session -> IO a) -> IO a
 withSession hostname port fn = do
   sock <- socketConnect hostname port
+  handle <- socketToHandle sock ReadWriteMode 
   session <- initSession
   handshake session sock
-  result <- fn session
+  result <- fn handle session
   disconnectSession session "Done."
   freeSession session
   return result
@@ -83,4 +85,13 @@ readAllChannel ch = do
            rest <- readAllChannel ch
            return $ res ++ rest
       else return ""
+
+retryIfNeeded :: Handle -> Session -> IO a -> IO a
+retryIfNeeded handle session action =
+  action `E.catch` (\(e :: ErrorCode) ->
+                      if e == EAGAIN
+                        then do
+                             waitSocket handle session
+                             retryIfNeeded handle session action
+                        else throw e )
 
