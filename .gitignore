@@ -7,4 +7,5 @@ dist/
 cabal-dev/
 Network/SSH/Client/LibSSH2/Foreign.hs
 Network/SSH/Client/LibSSH2/Types.hs
+Network/SSH/Client/LibSSH2/Errors.hs
 ssh-client

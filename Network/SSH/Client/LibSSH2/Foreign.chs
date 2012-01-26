@@ -14,6 +14,7 @@ import Network.Socket
 import Data.Bits
 
 import Network.SSH.Client.LibSSH2.Types
+import Network.SSH.Client.LibSSH2.Errors
 
 data KnownHostType =
     TYPE_MASK
@@ -80,24 +81,8 @@ init_crypto True  = 0
 ssh2socket :: Socket -> CInt
 ssh2socket (MkSocket s _ _ _ _) = s
 
-type CStringCLen = (CString, CUInt)
-
-withCStringLenIntConv :: String -> (CStringCLen -> IO a) -> IO a
-withCStringLenIntConv str fn =
-  withCStringLen str (\(ptr, len) -> fn (ptr, fromIntegral len))
-
-peekCStringPtr :: Ptr CString -> IO String
-peekCStringPtr ptr = peekCString =<< peek ptr
-
-peekMaybeCStringPtr :: Ptr CString -> IO (Maybe String)
-peekMaybeCStringPtr ptr = do
-  strPtr <- peek ptr
-  if strPtr == nullPtr
-    then return Nothing
-    else Just `fmap` peekCString strPtr
-
 {# fun init as initialize
-  { init_crypto `Bool' } -> `Int' #}
+  { init_crypto `Bool' } -> `Int' handleInt* #}
 
 {# fun exit as exit { } -> `()' #}
 
@@ -200,13 +185,4 @@ readChannel c sz = readChannelEx c 0 sz
 
 channelExitSignal :: Channel -> IO (Int, String, Maybe String, Maybe String)
 channelExitSignal ch = channelExitSignal_ ch nullPtr nullPtr nullPtr
-
-{# fun session_last_error as getLastError_
-  { toPointer `Session',
-    alloca- `String' peekCStringPtr*,
-    castPtr `Ptr Int',
-    `Int' } -> `Int' #}
-
-getLastError :: Session -> IO (Int, String)
-getLastError s = getLastError_ s nullPtr 0
 

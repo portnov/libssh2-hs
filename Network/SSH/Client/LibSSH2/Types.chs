@@ -8,11 +8,33 @@ module Network.SSH.Client.LibSSH2.Types
   (Session,
    KnownHosts,
    Channel,
-   IsPointer (..)
+   IsPointer (..),
+   CStringCLen,
+   withCStringLenIntConv,
+   peekCStringPtr,
+   peekMaybeCStringPtr
   ) where
 
 import Foreign
 import Foreign.Ptr
+import Foreign.C.Types
+import Foreign.C.String
+
+type CStringCLen = (CString, CUInt)
+
+withCStringLenIntConv :: String -> (CStringCLen -> IO a) -> IO a
+withCStringLenIntConv str fn =
+  withCStringLen str (\(ptr, len) -> fn (ptr, fromIntegral len))
+
+peekCStringPtr :: Ptr CString -> IO String
+peekCStringPtr ptr = peekCString =<< peek ptr
+
+peekMaybeCStringPtr :: Ptr CString -> IO (Maybe String)
+peekMaybeCStringPtr ptr = do
+  strPtr <- peek ptr
+  if strPtr == nullPtr
+    then return Nothing
+    else Just `fmap` peekCString strPtr
 
 class IsPointer p where
   fromPointer :: Ptr () -> p
