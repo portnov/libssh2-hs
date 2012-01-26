@@ -90,6 +90,16 @@ withCStringLenIntConv :: String -> (CStringCLen -> IO a) -> IO a
 withCStringLenIntConv str fn =
   withCStringLen str (\(ptr, len) -> fn (ptr, fromIntegral len))
 
+peekCStringPtr :: Ptr CString -> IO String
+peekCStringPtr ptr = peekCString =<< peek ptr
+
+peekMaybeCStringPtr :: Ptr CString -> IO (Maybe String)
+peekMaybeCStringPtr ptr = do
+  strPtr <- peek ptr
+  if strPtr == nullPtr
+    then return Nothing
+    else Just `fmap` peekCString strPtr
+
 {# fun init as initialize
   { init_crypto `Bool' } -> `Int' #}
 
@@ -125,7 +135,7 @@ knownHostsReadFile :: KnownHosts -> String -> IO Int
 knownHostsReadFile kh path = knownHostsReadFile_ kh path 1
 
 {# fun session_hostkey as getHostKey
-  { id `Session', alloca- `CULong' peek*, alloca- `CInt' peek* } -> `String' #}
+  { id `Session', alloca- `CUInt' peek*, alloca- `CInt' peek* } -> `String' #}
 
 {# fun knownhost_checkp as checkKnownHost_
   { id `KnownHosts',
@@ -180,8 +190,20 @@ readChannel c sz = readChannelEx c 0 sz
 {# fun session_block_directions as blockedDirections
   { id `Session' } -> `[Direction]' int2dir #}
 
-peekCStringPtr :: Ptr CString -> IO String
-peekCStringPtr ptr = peek ptr >>= peekCString
+{# fun channel_get_exit_status as channelExitStatus
+  { id `Channel' } -> `Int' #}
+
+{# fun channel_get_exit_signal as channelExitSignal_
+  { id `Channel',
+    alloca- `String' peekCStringPtr*,
+    castPtr `Ptr Int',
+    alloca- `Maybe String' peekMaybeCStringPtr*,
+    castPtr `Ptr Int',
+    alloca- `Maybe String' peekMaybeCStringPtr*,
+    castPtr `Ptr Int' } -> `Int' #}
+
+channelExitSignal :: Channel -> IO (Int, String, Maybe String, Maybe String)
+channelExitSignal ch = channelExitSignal_ ch nullPtr nullPtr nullPtr
 
 {# fun session_last_error as getLastError_
   { id `Session',
@@ -191,3 +213,4 @@ peekCStringPtr ptr = peek ptr >>= peekCString
 
 getLastError :: Session -> IO (Int, String)
 getLastError s = getLastError_ s nullPtr 0
+
