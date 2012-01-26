@@ -4,7 +4,19 @@
 
 {# context lib="ssh2" prefix="libssh2" #}
 
-module Network.SSH.Client.LibSSH2.Errors where
+module Network.SSH.Client.LibSSH2.Errors
+  (-- * Types
+   ErrorCode (..),
+   NULL_POINTER,
+
+   -- * Utilities
+   CIntResult (..),
+
+   -- * Functions
+   getLastError,
+   handleInt,
+   handleNullPtr
+  ) where
 
 import Control.Exception
 import Data.Generics
@@ -14,6 +26,7 @@ import Foreign.C.Types
 
 import Network.SSH.Client.LibSSH2.Types
 
+-- | Error codes returned by libssh2.
 data ErrorCode =
     NONE
   | SOCKET_NONE
@@ -71,6 +84,8 @@ error2int = fromIntegral . negate . fromEnum
 int2error :: CInt -> ErrorCode
 int2error = toEnum . negate . fromIntegral
 
+-- | Exception to throw when null pointer received
+-- from libssh2.
 data NULL_POINTER = NULL_POINTER
   deriving (Eq, Show, Data, Typeable)
 
@@ -112,15 +127,20 @@ instance CIntResult (CInt, a, b, c) where
     castPtr `Ptr Int',
     `Int' } -> `Int' #}
 
+-- | Get last error information.
 getLastError :: Session -> IO (Int, String)
 getLastError s = getLastError_ s nullPtr 0
 
+-- | Throw an exception if negative value passed,
+-- or return unchanged value.
 handleInt :: (CIntResult a) => a -> IO (IntResult a)
 handleInt x =
   if intResult x < 0
     then throw (int2error $ intResult x)
     else return (fromCInt x)
 
+-- | Throw an exception if null pointer passed,
+-- or return it casted to right type.
 handleNullPtr :: (IsPointer a) => Ptr () -> IO a
 handleNullPtr p
   | p == nullPtr = throw NULL_POINTER
