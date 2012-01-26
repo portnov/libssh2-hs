@@ -30,6 +30,7 @@ waitSocket h s = do
     then hWaitForInput h (10*1000)
     else return True
 
+-- | Similar to Network.connectTo, but does not socketToHandle.
 socketConnect :: String -> Int -> IO Socket
 socketConnect hostname port = do
     proto <- getProtocolNumber "tcp"
@@ -39,7 +40,16 @@ socketConnect hostname port = do
               connect sock (SockAddrInet (fromIntegral port) (hostAddress he))
               return sock)
 
-withSSH2 :: FilePath -> FilePath -> FilePath -> String -> String -> Int -> (Channel -> IO a) -> IO a
+-- | Execute some actions within SSH2 connection.
+-- Uses public key authentication.
+withSSH2 :: FilePath          -- ^ Path to known_hosts file
+         -> FilePath          -- ^ Path to public key file
+         -> FilePath          -- ^ Path to private key file
+         -> String            -- ^ Remote user name
+         -> String            -- ^ Remote host name
+         -> Int               -- ^ Remote port number (usually 22)
+         -> (Channel -> IO a) -- ^ Actions to perform on channel
+         -> IO a
 withSSH2 known_hosts public private login hostname port fn =
   withSession hostname port $ \_ s -> do
     r <- checkHost s hostname port known_hosts
@@ -47,7 +57,11 @@ withSSH2 known_hosts public private login hostname port fn =
     a <- publicKeyAuthFile s login public private ""
     withChannel s $ fn
 
-withSession :: String -> Int -> (Handle -> Session -> IO a) -> IO a
+-- | Execute some actions within SSH2 session
+withSession :: String                      -- ^ Remote host name
+            -> Int                         -- ^ Remote port number (usually 22)
+            -> (Handle -> Session -> IO a) -- ^ Actions to perform on handle and session
+            -> IO a
 withSession hostname port fn = do
   sock <- socketConnect hostname port
   handle <- socketToHandle sock ReadWriteMode 
@@ -58,7 +72,12 @@ withSession hostname port fn = do
   freeSession session
   return result
 
-checkHost :: Session -> String -> Int -> FilePath -> IO KnownHostResult
+--  | Check remote host against known hosts list
+checkHost :: Session
+          -> String             -- ^ Remote host name
+          -> Int                -- ^ Remote port number (usually 22)
+          -> FilePath           -- ^ Path to known_hosts file
+          -> IO KnownHostResult
 checkHost s host port path = do
   kh <- initKnownHosts s
   knownHostsReadFile kh path
@@ -68,6 +87,7 @@ checkHost s host port path = do
   freeKnownHosts kh
   return result
 
+-- | Execute some actions withing SSH2 channel
 withChannel :: Session -> (Channel -> IO a) -> IO a
 withChannel s fn = do
   ch <- openChannelSession s
@@ -77,6 +97,7 @@ withChannel s fn = do
   freeChannel ch
   return result
 
+-- | Read all data from the channel
 readAllChannel :: Channel -> IO String
 readAllChannel ch = do
     (sz, res) <- readChannel ch 0x400
@@ -86,7 +107,13 @@ readAllChannel ch = do
            return $ res ++ rest
       else return ""
 
-scpSendFile :: Session -> Int -> FilePath -> FilePath -> IO Integer
+-- | Send a file to remote host via SCP.
+-- Returns size of sent data.
+scpSendFile :: Session   
+            -> Int       -- ^ File creation mode (0o777, for example)
+            -> FilePath  -- ^ Path to local file
+            -> FilePath  -- ^ Remote file path
+            -> IO Integer
 scpSendFile s mode local remote = do
   h <- openFile local ReadMode
   size <- hFileSize h
@@ -97,7 +124,12 @@ scpSendFile s mode local remote = do
   freeChannel ch
   return result
 
-scpReceiveFile :: Session -> FilePath -> FilePath -> IO Integer
+-- | Receive file from remote host via SCP.
+-- Returns size of received data.
+scpReceiveFile :: Session   --
+               -> FilePath  -- ^ Remote file path
+               -> FilePath  -- ^ Path to local file
+               -> IO Integer
 scpReceiveFile s remote local = do
   h <- openFile local WriteMode
   ch <- scpReceiveChannel s remote
@@ -107,6 +139,8 @@ scpReceiveFile s remote local = do
   freeChannel ch
   return result
 
+-- | Retry the action repeatedly, while it fails with EAGAIN.
+-- This does matter if using nonblocking mode.
 retryIfNeeded :: Handle -> Session -> IO a -> IO a
 retryIfNeeded handle session action =
   action `E.catch` (\(e :: ErrorCode) ->
