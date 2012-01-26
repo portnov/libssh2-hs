@@ -4,7 +4,7 @@
 
 {# context lib="ssh2" prefix="libssh2" #}
 
-module Network.SSH.Client.Foreign where
+module Network.SSH.Client.LibSSH2.Foreign where
 
 import Foreign
 import Foreign.Ptr

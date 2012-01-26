@@ -7,7 +7,7 @@ import Network.BSD
 import Network.Socket
 import System.IO
 
-import Network.SSH.Client.Foreign
+import Network.SSH.Client.LibSSH2.Foreign
 
 -- | Check if handle is ready for reading in 10 seconds.
 waitSocket :: Handle -> Session -> IO Bool
