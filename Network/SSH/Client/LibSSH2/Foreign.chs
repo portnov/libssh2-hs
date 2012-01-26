@@ -223,11 +223,12 @@ type Size = {# type size_t #}
 {# fun channel_read_ex as readChannelEx
   { toPointer `Channel',
     `Int',
-    alloca- `String' peekCString*,
+    alloca- `String' peekCAString*,
     id `Size' } -> `Int' handleInt* #}
 
 -- | Read data from channel.
 -- Returns amount of given data and data itself.
+-- NOTE: returns bytes sequence, i.e. not Unicode.
 readChannel :: Channel         -- 
             -> Size             -- ^ Amount of data to read
             -> IO (Int, String)

@@ -27,14 +27,14 @@ withCStringLenIntConv str fn =
   withCStringLen str (\(ptr, len) -> fn (ptr, fromIntegral len))
 
 peekCStringPtr :: Ptr CString -> IO String
-peekCStringPtr ptr = peekCString =<< peek ptr
+peekCStringPtr ptr = peekCAString =<< peek ptr
 
 peekMaybeCStringPtr :: Ptr CString -> IO (Maybe String)
 peekMaybeCStringPtr ptr = do
   strPtr <- peek ptr
   if strPtr == nullPtr
     then return Nothing
-    else Just `fmap` peekCString strPtr
+    else Just `fmap` peekCAString strPtr
 
 class IsPointer p where
   fromPointer :: Ptr () -> p

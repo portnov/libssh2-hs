@@ -1,22 +1,60 @@
 
 import System.Environment
 import System.FilePath
+import Codec.Binary.UTF8.String
+
 import Network.SSH.Client.LibSSH2.Foreign
 import Network.SSH.Client.LibSSH2
 
 main = do
   args <- getArgs
   case args of
-    [user, host, port, cmd] -> runCommand user host (read port) cmd
+    ["command", user, host, port, cmd]  -> runCommand user host (read port) cmd
+    ["send", user, host, port, path]    -> sendFile user host (read port) path
+    ["receive", user, host, port, path] -> receiveFile user host (read port) path
     _ -> putStrLn "Synopsis: ssh-client USERNAME HOSTNAME PORT COMMAND"
 
-runCommand login host port command = do
+runCommand login host port command =
+  ssh login host port $ \ch -> do
+      channelExecute ch command
+      result <- readAllChannel ch
+      putStrLn (decodeString result)
+
+sendFile login host port path = do
   initialize True
   home <- getEnv "HOME"
   let known_hosts = home </> ".ssh" </> "known_hosts"
       public = home </> ".ssh" </> "id_rsa.pub"
       private = home </> ".ssh" </> "id_rsa"
-  withSSH2 known_hosts public private login host port $ \ch -> do
-      channelExecute ch command
-      result <- readAllChannel ch
-      putStrLn result
+
+  withSession host port $ \_ s -> do
+      r <- checkHost s host port known_hosts
+      print r
+      publicKeyAuthFile s login public private ""
+      sz <- scpSendFile s 0o644 path (takeFileName path)
+      putStrLn $ "Sent: " ++ show sz ++ " bytes."
+  exit
+
+receiveFile login host port path = do
+  initialize True
+  home <- getEnv "HOME"
+  let known_hosts = home </> ".ssh" </> "known_hosts"
+      public = home </> ".ssh" </> "id_rsa.pub"
+      private = home </> ".ssh" </> "id_rsa"
+
+  withSession host port $ \_ s -> do
+      r <- checkHost s host port known_hosts
+      print r
+      publicKeyAuthFile s login public private ""
+      sz <- scpReceiveFile s (takeFileName path) path
+      putStrLn $ "Sent: " ++ show sz ++ " bytes."
+  exit
+
+ssh login host port actions = do
+  initialize True
+  home <- getEnv "HOME"
+  let known_hosts = home </> ".ssh" </> "known_hosts"
+      public = home </> ".ssh" </> "id_rsa.pub"
+      private = home </> ".ssh" </> "id_rsa"
+  withSSH2 known_hosts public private login host port $ actions
+  exit

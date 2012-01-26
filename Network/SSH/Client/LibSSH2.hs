@@ -9,7 +9,9 @@ module Network.SSH.Client.LibSSH2
    withChannel,
    checkHost,
    readAllChannel,
-   retryIfNeeded
+   retryIfNeeded,
+   scpSendFile,
+   scpReceiveFile
   ) where
 
 import Control.Exception as E
