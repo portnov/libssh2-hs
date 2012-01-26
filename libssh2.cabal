@@ -30,7 +30,8 @@ Cabal-version:       >=1.6
 
 
 Library
-  Exposed-modules:     Network.SSH.Client.LibSSH2.Foreign
+  Exposed-modules:     Network.SSH.Client.LibSSH2.Types
+                       Network.SSH.Client.LibSSH2.Foreign
                        Network.SSH.Client.LibSSH2.Errors
                        Network.SSH.Client.LibSSH2
   

@@ -1,7 +1,7 @@
 
 import System.Environment
 import System.FilePath
-import Network.SSH.Client.Foreign
+import Network.SSH.Client.LibSSH2.Foreign
 import Network.SSH.Client.LibSSH2
 
 main = do

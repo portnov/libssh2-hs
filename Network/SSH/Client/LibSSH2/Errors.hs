@@ -6,6 +6,8 @@ import Control.Exception
 import Data.Generics
 import Foreign.C.Types
 
+import Network.SSH.Client.LibSSH2.Types
+
 data SSH2Error =
     NONE
   | SOCKET_NONE

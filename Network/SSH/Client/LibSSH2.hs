@@ -1,5 +1,15 @@
 
-module Network.SSH.Client.LibSSH2 where
+module Network.SSH.Client.LibSSH2
+  (-- * Types
+   Session, Channel, KnownHosts,
+
+   -- * Functions
+   withSSH2,
+   withSession,
+   withChannel,
+   checkHost,
+   readAllChannel
+  ) where
 
 import Control.Exception
 import Network
@@ -7,6 +17,7 @@ import Network.BSD
 import Network.Socket
 import System.IO
 
+import Network.SSH.Client.LibSSH2.Types
 import Network.SSH.Client.LibSSH2.Foreign
 
 -- | Check if handle is ready for reading in 10 seconds.
