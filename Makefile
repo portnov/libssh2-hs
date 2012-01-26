@@ -1,6 +1,6 @@
 LIBS=-lssh2
 GHC=ghc $(LIBS) --make
-C2HS=c2hs
+C2HS=c2hs -C"-Iinclude/"
 HSFILES=Network/SSH/Client/LibSSH2.hs Network/SSH/Client/LibSSH2/Types.hs Network/SSH/Client/LibSSH2/Errors.hs Network/SSH/Client/LibSSH2/Foreign.hs
 
 all: ssh-client

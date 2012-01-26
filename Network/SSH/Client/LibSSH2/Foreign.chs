@@ -1,5 +1,6 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 
+#include "libssh2_local.h"
 #include <libssh2.h>
 
 {# context lib="ssh2" prefix="libssh2" #}
@@ -12,6 +13,8 @@ import Foreign.C.Types
 import Foreign.C.String
 import Network.Socket
 import Data.Bits
+import Data.Int
+import Data.Time.Clock.POSIX
 
 import Network.SSH.Client.LibSSH2.Types
 import Network.SSH.Client.LibSSH2.Errors
@@ -166,6 +169,14 @@ channelShell c command = channelProcess c "shell" command
 readChannel :: Channel -> Int -> IO (Int, String)
 readChannel c sz = readChannelEx c 0 sz
 
+{# fun channel_write_ex as writeChannelEx
+  { toPointer `Channel',
+    `Int',
+    `String' & } -> `Int' handleInt* #}
+
+writeChannel :: Channel -> String -> IO Int
+writeChannel ch str = writeChannelEx ch 0 str
+
 {# fun channel_close as closeChannel
   { toPointer `Channel' } -> `Int' handleInt* #}
 
@@ -189,4 +200,20 @@ readChannel c sz = readChannelEx c 0 sz
 
 channelExitSignal :: Channel -> IO (Int, String, Maybe String, Maybe String)
 channelExitSignal ch = channelExitSignal_ ch nullPtr nullPtr nullPtr
+
+{# fun scp_send64 as scpSendChannel
+  { toPointer `Session',
+    `String',
+    `Int',
+    `Int64',
+    round `POSIXTime',
+    round `POSIXTime' } -> `Channel' handleNullPtr* #}
+
+-- TODO: receive struct stat also.
+scpReceiveChannel :: Session -> String -> IO Channel
+scpReceiveChannel s path = do
+  ptr <- withCString path $ \pathptr ->
+            allocaBytes {# sizeof stat_t #} $ \statptr ->
+              {# call scp_recv #} (toPointer s) pathptr statptr
+  handleNullPtr ptr
 

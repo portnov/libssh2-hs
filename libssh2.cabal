@@ -35,8 +35,11 @@ Library
                        Network.SSH.Client.LibSSH2.Errors
                        Network.SSH.Client.LibSSH2
   
+  Include-dirs:        include
+  Includes:            include/libssh2_local.h
+
   Build-depends:       base >= 4 && < 5, network >= 2.3,
-                       syb >= 0.3.3
+                       syb >= 0.3.3, time >= 1.2
 
   Extra-libraries:     "ssh2"
   
