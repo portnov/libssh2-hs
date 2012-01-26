@@ -78,10 +78,10 @@ data ErrorCode =
 
 instance Exception ErrorCode
 
-error2int :: ErrorCode -> CInt
+error2int :: (Num i) => ErrorCode -> i
 error2int = fromIntegral . negate . fromEnum
 
-int2error :: CInt -> ErrorCode
+int2error :: (Integral i) => i -> ErrorCode
 int2error = toEnum . negate . fromIntegral
 
 -- | Exception to throw when null pointer received
@@ -103,10 +103,16 @@ instance CIntResult CInt where
   intResult = id
   fromCInt = fromIntegral
 
-instance CIntResult (CInt, a) where
-  type IntResult (CInt, a) = (Int, a)
+instance CIntResult CLong where
+  type IntResult CLong = Int
 
-  intResult (i, _) = i
+  intResult = fromIntegral
+  fromCInt = fromIntegral
+
+instance (Integral i) => CIntResult (i, a) where
+  type IntResult (i, a) = (Int, a)
+
+  intResult (i, _) = fromIntegral i
   fromCInt (i, a) = (fromIntegral i, a)
 
 instance CIntResult (CInt, a, b) where

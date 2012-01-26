@@ -20,9 +20,9 @@ import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.C.String
 
-type CStringCLen = (CString, CUInt)
+type CStringCLen i = (CString, i)
 
-withCStringLenIntConv :: String -> (CStringCLen -> IO a) -> IO a
+withCStringLenIntConv :: (Integral i) => String -> (CStringCLen i -> IO a) -> IO a
 withCStringLenIntConv str fn =
   withCStringLen str (\(ptr, len) -> fn (ptr, fromIntegral len))
 

@@ -163,7 +163,7 @@ knownHostsReadFile kh path = knownHostsReadFile_ kh path 1
 
 -- | Get remote host public key
 {# fun session_hostkey as getHostKey
-  { toPointer `Session', alloca- `CUInt' peek*, alloca- `CInt' peek* } -> `String' #}
+  { toPointer `Session', alloca- `CULong' peek*, alloca- `CInt' peek* } -> `String' #}
 
 {# fun knownhost_checkp as checkKnownHost_
   { toPointer `KnownHosts',
@@ -218,23 +218,25 @@ channelExecute c command = channelProcess c "exec" command
 channelShell :: Channel -> String -> IO Int
 channelShell c command = channelProcess c "shell" command
 
+type Size = {# type size_t #}
+
 {# fun channel_read_ex as readChannelEx
   { toPointer `Channel',
     `Int',
     alloca- `String' peekCString*,
-    `Int' } -> `Int' handleInt* #}
+    id `Size' } -> `Int' handleInt* #}
 
 -- | Read data from channel.
 -- Returns amount of given data and data itself.
 readChannel :: Channel         -- 
-            -> Int             -- ^ Amount of data to read
+            -> Size             -- ^ Amount of data to read
             -> IO (Int, String)
 readChannel c sz = readChannelEx c 0 sz
 
 {# fun channel_write_ex as writeChannelEx
   { toPointer `Channel',
     `Int',
-    `String' & } -> `Int' handleInt* #}
+    withCStringLenIntConv* `String' & } -> `Int' handleInt* #}
 
 -- | Write data to channel.
 -- Returns amount of written data.
