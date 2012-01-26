@@ -86,6 +86,27 @@ readAllChannel ch = do
            return $ res ++ rest
       else return ""
 
+scpSendFile :: Session -> Int -> FilePath -> FilePath -> IO Integer
+scpSendFile s mode local remote = do
+  h <- openFile local ReadMode
+  size <- hFileSize h
+  ch <- scpSendChannel s remote mode (fromIntegral size) 0 0
+  result <- writeChannelFromHandle ch h
+  hClose h
+  closeChannel ch
+  freeChannel ch
+  return result
+
+scpReceiveFile :: Session -> FilePath -> FilePath -> IO Integer
+scpReceiveFile s remote local = do
+  h <- openFile local WriteMode
+  ch <- scpReceiveChannel s remote
+  result <- readChannelToHandle ch h
+  hClose h
+  closeChannel ch
+  freeChannel ch
+  return result
+
 retryIfNeeded :: Handle -> Session -> IO a -> IO a
 retryIfNeeded handle session action =
   action `E.catch` (\(e :: ErrorCode) ->

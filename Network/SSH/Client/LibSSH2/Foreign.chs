@@ -11,6 +11,7 @@ import Foreign
 import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.C.String
+import System.IO
 import Network.Socket
 import Data.Bits
 import Data.Int
@@ -176,6 +177,50 @@ readChannel c sz = readChannelEx c 0 sz
 
 writeChannel :: Channel -> String -> IO Int
 writeChannel ch str = writeChannelEx ch 0 str
+
+writeChannelFromHandle :: Channel -> Handle -> IO Integer
+writeChannelFromHandle ch handle = do
+    allocaBytes bufferSize $ \buffer ->
+        go handle buffer
+  where
+    go h buffer = do
+      sz <- hGetBuf h buffer bufferSize
+      {# call channel_write_ex #}
+          (toPointer ch)
+          0
+          buffer
+          (fromIntegral bufferSize)
+      if sz < bufferSize
+        then return $ fromIntegral sz
+        else do
+             rest <- go h buffer
+             return $ fromIntegral sz + rest
+
+    bufferSize = 0x100000
+
+readChannelToHandle :: Channel -> Handle -> IO Integer
+readChannelToHandle ch handle = do
+    allocaBytes bufferSize $ \buffer ->
+        go handle buffer
+  where
+    go :: Handle -> CString -> IO Integer
+    go h buffer = do
+      sz <- {# call channel_read_ex #}
+                (toPointer ch)
+                0
+                buffer
+                (fromIntegral bufferSize)
+      let isz :: Integer
+          isz = fromIntegral sz
+      hPutBuf h buffer (fromIntegral sz)
+      if fromIntegral sz < bufferSize
+        then return isz
+        else do
+             rest <- go h buffer
+             return $ isz + rest
+
+    bufferSize :: Int
+    bufferSize = 0x100000
 
 {# fun channel_close as closeChannel
   { toPointer `Channel' } -> `Int' handleInt* #}
