@@ -134,8 +134,8 @@ scpReceiveFile :: Session   --
                -> IO Integer
 scpReceiveFile s remote local = do
   h <- openFile local WriteMode
-  ch <- scpReceiveChannel s remote
-  result <- readChannelToHandle ch h
+  (ch, fileSize) <- scpReceiveChannel s remote
+  result <- readChannelToHandle ch h fileSize
   hClose h
   closeChannel ch
   freeChannel ch

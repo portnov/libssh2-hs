@@ -15,7 +15,9 @@ module Network.SSH.Client.LibSSH2.Errors
    -- * Functions
    getLastError,
    handleInt,
-   handleNullPtr
+   handleBool,
+   handleNullPtr,
+   int2error
   ) where
 
 import Control.Exception
@@ -144,6 +146,12 @@ handleInt x =
   if intResult x < 0
     then throw (int2error $ intResult x)
     else return (fromCInt x)
+
+handleBool :: CInt -> IO Bool
+handleBool x
+  | x == 0 = return False
+  | x > 0  = return True
+  | otherwise = throw (int2error x)
 
 -- | Throw an exception if null pointer passed,
 -- or return it casted to right type.

@@ -47,7 +47,7 @@ receiveFile login host port path = do
       print r
       publicKeyAuthFile s login public private ""
       sz <- scpReceiveFile s (takeFileName path) path
-      putStrLn $ "Sent: " ++ show sz ++ " bytes."
+      putStrLn $ "Received: " ++ show sz ++ " bytes."
   exit
 
 ssh login host port actions = do

@@ -32,6 +32,8 @@ module Network.SSH.Client.LibSSH2.Foreign
    scpSendChannel, scpReceiveChannel
   ) where
 
+import Control.Exception
+import Control.Monad
 import Foreign
 import Foreign.Ptr
 import Foreign.C.Types
@@ -268,29 +270,39 @@ writeChannelFromHandle ch handle = do
 
 -- | Read all data from channel to handle.
 -- Returns amount of transferred data.
-readChannelToHandle :: Channel -> Handle -> IO Integer
-readChannelToHandle ch handle = do
+readChannelToHandle :: Channel -> Handle -> Offset -> IO Integer
+readChannelToHandle ch handle fileSize = do
     allocaBytes bufferSize $ \buffer ->
-        go handle buffer
+        go handle 0 fileSize buffer
   where
-    go :: Handle -> CString -> IO Integer
-    go h buffer = do
+    go :: Handle -> Integer -> Offset -> CString -> IO Integer
+    go h got fileSize buffer = do
+      let toRead = min (fromIntegral fileSize - got) (fromIntegral bufferSize)
       sz <- {# call channel_read_ex #}
                 (toPointer ch)
                 0
                 buffer
-                (fromIntegral bufferSize)
+                (fromIntegral toRead)
+      when (sz < 0) $
+          throw (int2error sz)
       let isz :: Integer
           isz = fromIntegral sz
       hPutBuf h buffer (fromIntegral sz)
-      if fromIntegral sz < bufferSize
-        then return isz
+      eof <- {# call channel_eof #} (toPointer ch)
+      let newGot = got + fromIntegral sz
+      if  (eof == 1) || (newGot == fromIntegral fileSize)
+        then do
+             hFlush h
+             return isz
         else do
-             rest <- go h buffer
+             rest <- go h newGot fileSize buffer
              return $ isz + rest
 
     bufferSize :: Int
     bufferSize = 0x100000
+
+{# fun channel_eof as channelIsEOF
+  { toPointer `Channel' } -> `Bool' handleBool* #}
 
 -- | Close channel (but do not free memory)
 {# fun channel_close as closeChannel
@@ -331,12 +343,20 @@ channelExitSignal ch = channelExitSignal_ ch nullPtr nullPtr nullPtr
     round `POSIXTime',
     round `POSIXTime' } -> `Channel' handleNullPtr* #}
 
+type Offset = {# type off_t #}
+
+{# pointer *stat_t as Stat newtype #}
+
 -- | Create SCP file receive channel.
 -- TODO: receive struct stat also.
-scpReceiveChannel :: Session -> FilePath -> IO Channel
+scpReceiveChannel :: Session -> FilePath -> IO (Channel, Offset)
 scpReceiveChannel s path = do
-  ptr <- withCString path $ \pathptr ->
-            allocaBytes {# sizeof stat_t #} $ \statptr ->
-              {# call scp_recv #} (toPointer s) pathptr statptr
-  handleNullPtr ptr
+  (ptr, sz) <- withCString path $ \pathptr ->
+                  allocaBytes {# sizeof stat_t #} $ \statptr -> do
+                    p <- {# call scp_recv #} (toPointer s) pathptr statptr
+                    size <- {# get stat_t->st_size #} statptr
+                    return (p, size)
+  channel <- handleNullPtr ptr
+  return (channel, sz)
+
 
