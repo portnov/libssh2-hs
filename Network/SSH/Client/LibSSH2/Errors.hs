@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances #-}
 
-module Network.SSH.Client.LibSSH2.Erros where
+module Network.SSH.Client.LibSSH2.Errors where
 
 import Control.Exception
 import Data.Generics
