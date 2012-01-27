@@ -29,7 +29,10 @@ module Network.SSH.Client.LibSSH2.Foreign
    writeChannelFromHandle, readChannelToHandle,
    channelProcess, channelExecute, channelShell,
    channelExitStatus, channelExitSignal,
-   scpSendChannel, scpReceiveChannel
+   scpSendChannel, scpReceiveChannel,
+
+   -- * Debug
+   TraceFlag (..), setTraceMode
   ) where
 
 import Control.Exception
@@ -206,12 +209,14 @@ checkKnownHost kh host port key mask = checkKnownHost_ kh host port key (length 
 openChannelSession :: Session -> IO Channel
 openChannelSession s = openSessionChannelEx s "session" 65536 32768 ""
 
--- | Run a process within channel. Arguments are:
--- type of process and request.
-{# fun channel_process_startup as channelProcess
-  { toPointer `Channel',
-    `String' &,
-    `String' & } -> `Int' handleInt* #}
+channelProcess :: Channel -> String -> String -> IO Int
+channelProcess ch kind command = do
+  withCStringLenIntConv kind $ \(kindptr, kindlen) ->
+    withCStringLenIntConv command $ \(commandptr, commandlen) ->
+      {# call channel_process_startup #}
+          (toPointer ch)
+          kindptr kindlen
+          commandptr commandlen >>= handleInt
 
 -- | Execute command
 channelExecute :: Channel -> String -> IO Int
@@ -250,6 +255,35 @@ writeChannel ch str = writeChannelEx ch 0 str
 
 {# fun channel_send_eof as channelSendEOF
   { toPointer `Channel' } -> `Int' handleInt* #}
+
+data TraceFlag =
+    T_TRANS
+  | T_KEX
+  | T_AUTH
+  | T_CONN
+  | T_SCP
+  | T_SFTP
+  | T_ERROR
+  | T_PUBLICKEY
+  | T_SOCKET
+  deriving (Eq, Show)
+
+tf2int :: TraceFlag -> CInt
+tf2int T_TRANS = 1 `shiftL` 1
+tf2int T_KEX   = 1 `shiftL` 2
+tf2int T_AUTH  = 1 `shiftL` 3
+tf2int T_CONN  = 1 `shiftL` 4
+tf2int T_SCP   = 1 `shiftL` 5
+tf2int T_SFTP  = 1 `shiftL` 6
+tf2int T_ERROR = 1 `shiftL` 7
+tf2int T_PUBLICKEY = 1 `shiftL` 8
+tf2int T_SOCKET = 1 `shiftL` 9
+
+trace2int :: [TraceFlag] -> CInt
+trace2int flags = foldr (.|.) 0 (map tf2int flags)
+
+{# fun trace as setTraceMode
+  { toPointer `Session', trace2int `[TraceFlag]' } -> `Int' handleInt* #}
 
 -- | Write all data to channel from handle.
 -- Returns amount of transferred data.

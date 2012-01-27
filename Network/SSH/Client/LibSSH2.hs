@@ -6,6 +6,7 @@ module Network.SSH.Client.LibSSH2
    -- * Functions
    withSSH2,
    withSession,
+   withSessionBlocking,
    withChannel,
    checkHost,
    readAllChannel,
@@ -57,7 +58,7 @@ withSSH2 :: FilePath          -- ^ Path to known_hosts file
          -> (Channel -> IO a) -- ^ Actions to perform on channel
          -> IO (Int, a)
 withSSH2 known_hosts public private login hostname port fn =
-  withSession hostname port $ \_ s -> do
+  withSessionBlocking hostname port $ \s -> do
     r <- checkHost s hostname port known_hosts
     print r
     a <- publicKeyAuthFile s login public private ""
@@ -74,6 +75,21 @@ withSession hostname port fn = do
   session <- initSession
   handshake session sock
   result <- fn handle session
+  disconnectSession session "Done."
+  freeSession session
+  hClose handle
+  return result
+
+-- | Execute some actions within SSH2 session
+withSessionBlocking :: String                      -- ^ Remote host name
+            -> Int                         -- ^ Remote port number (usually 22)
+            -> (Session -> IO a) -- ^ Actions to perform on handle and session
+            -> IO a
+withSessionBlocking hostname port fn = do
+  sock <- socketConnect hostname port
+  session <- initSession
+  handshake session sock
+  result <- fn session
   disconnectSession session "Done."
   freeSession session
   return result
