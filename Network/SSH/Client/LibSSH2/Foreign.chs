@@ -166,7 +166,7 @@ knownHostsReadFile kh path = knownHostsReadFile_ kh path 1
 
 -- | Get remote host public key
 {# fun session_hostkey as getHostKey
-  { toPointer `Session', alloca- `CULong' peek*, alloca- `CInt' peek* } -> `String' #}
+  { toPointer `Session', alloca- `Size' peek*, alloca- `CInt' peek* } -> `String' #}
 
 {# fun knownhost_checkp as checkKnownHost_
   { toPointer `KnownHosts',
