@@ -11,7 +11,10 @@ module Network.SSH.Client.LibSSH2
    readAllChannel,
    retryIfNeeded,
    scpSendFile,
-   scpReceiveFile
+   scpReceiveFile,
+
+   -- * Utilities
+   socketConnect
   ) where
 
 import Control.Monad
@@ -52,7 +55,7 @@ withSSH2 :: FilePath          -- ^ Path to known_hosts file
          -> String            -- ^ Remote host name
          -> Int               -- ^ Remote port number (usually 22)
          -> (Channel -> IO a) -- ^ Actions to perform on channel
-         -> IO a
+         -> IO (Int, a)
 withSSH2 known_hosts public private login hostname port fn =
   withSession hostname port $ \_ s -> do
     r <- checkHost s hostname port known_hosts
@@ -91,14 +94,15 @@ checkHost s host port path = do
   return result
 
 -- | Execute some actions withing SSH2 channel
-withChannel :: Session -> (Channel -> IO a) -> IO a
+withChannel :: Session -> (Channel -> IO a) -> IO (Int, a)
 withChannel s fn = do
   ch <- openChannelSession s
   -- waitSocket sock s
   result <- fn ch
   closeChannel ch
+  exitStatus <- channelExitStatus ch
   freeChannel ch
-  return result
+  return (exitStatus, result)
 
 -- | Read all data from the channel
 readAllChannel :: Channel -> IO String
