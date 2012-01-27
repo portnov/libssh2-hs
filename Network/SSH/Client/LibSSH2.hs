@@ -14,6 +14,7 @@ module Network.SSH.Client.LibSSH2
    scpReceiveFile
   ) where
 
+import Control.Monad
 import Control.Exception as E
 import Network
 import Network.BSD
@@ -103,11 +104,17 @@ withChannel s fn = do
 readAllChannel :: Channel -> IO String
 readAllChannel ch = do
     (sz, res) <- readChannel ch 0x400
+    putStrLn $ "---- >> Read: " ++ show sz ++ " / " ++ show (length res)
+    when (sz == 0) $
+      putStrLn $ "  :: " ++ take 20 res ++ "..."
     if sz > 0
       then do
            rest <- readAllChannel ch
+           putStrLn $ "---- >> Received: " ++ show (length rest)
            return $ res ++ rest
-      else return ""
+      else if sz < 0
+             then throw (int2error sz)
+             else return ""
 
 -- | Send a file to remote host via SCP.
 -- Returns size of sent data.

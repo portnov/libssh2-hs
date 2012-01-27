@@ -10,6 +10,7 @@ module Network.SSH.Client.LibSSH2.Types
    Channel,
    IsPointer (..),
    CStringCLen,
+   Size, SSize,
    withCStringLenIntConv,
    peekCStringPtr,
    peekMaybeCStringPtr
@@ -19,6 +20,10 @@ import Foreign
 import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.C.String
+
+type Size = {# type size_t #}
+
+type SSize = {# type ssize_t #}
 
 type CStringCLen i = (CString, i)
 

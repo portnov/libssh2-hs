@@ -221,20 +221,21 @@ channelExecute c command = channelProcess c "exec" command
 channelShell :: Channel -> String -> IO Int
 channelShell c command = channelProcess c "shell" command
 
-type Size = {# type size_t #}
-
-{# fun channel_read_ex as readChannelEx
-  { toPointer `Channel',
-    `Int',
-    alloca- `String' peekCAString*,
-    id `Size' } -> `Int' handleInt* #}
+readChannelEx :: Channel -> Int -> Size -> IO (SSize, String)
+readChannelEx ch i size =
+  allocaBytes (fromIntegral size) $ \buffer -> do
+    rc <- {# call channel_read_ex #} (toPointer ch) (fromIntegral i) buffer size
+    when (rc < 0) $
+        throw (int2error rc)
+    str <- peekCAStringLen (buffer, fromIntegral rc)
+    return (rc, str)
 
 -- | Read data from channel.
 -- Returns amount of given data and data itself.
 -- NOTE: returns bytes sequence, i.e. not Unicode.
 readChannel :: Channel         -- 
             -> Size             -- ^ Amount of data to read
-            -> IO (Int, String)
+            -> IO (SSize, String)
 readChannel c sz = readChannelEx c 0 sz
 
 {# fun channel_write_ex as writeChannelEx
@@ -297,33 +298,36 @@ writeChannelFromHandle session ch handle =
 readChannelToHandle :: Channel -> Handle -> Offset -> IO Integer
 readChannelToHandle ch handle fileSize = do
     allocaBytes bufferSize $ \buffer ->
-        go handle 0 fileSize buffer
+        readChannelCB ch buffer bufferSize fileSize callback
   where
-    go :: Handle -> Integer -> Offset -> CString -> IO Integer
-    go h got fileSize buffer = do
-      let toRead = min (fromIntegral fileSize - got) (fromIntegral bufferSize)
-      sz <- {# call channel_read_ex #}
-                (toPointer ch)
-                0
-                buffer
-                (fromIntegral toRead)
-      when (sz < 0) $
-          throw (int2error sz)
-      let isz :: Integer
-          isz = fromIntegral sz
-      hPutBuf h buffer (fromIntegral sz)
-      eof <- {# call channel_eof #} (toPointer ch)
-      let newGot = got + fromIntegral sz
-      if  (eof == 1) || (newGot == fromIntegral fileSize)
-        then do
-             hFlush h
-             return isz
-        else do
-             rest <- go h newGot fileSize buffer
-             return $ isz + rest
+    callback buffer size = hPutBuf handle buffer size
 
     bufferSize :: Int
     bufferSize = 0x100000
+
+readChannelCB :: Channel -> CString -> Int -> Offset -> (CString -> Int -> IO a) -> IO Integer
+readChannelCB ch buffer bufferSize fileSize callback =
+  let go got = do
+        let toRead = min (fromIntegral fileSize - got) (fromIntegral bufferSize)
+        sz <- {# call channel_read_ex #}
+                  (toPointer ch)
+                  0
+                  buffer
+                  (fromIntegral toRead)
+        when (sz < 0) $
+            throw (int2error sz)
+        let isz :: Integer
+            isz = fromIntegral sz
+        callback buffer (fromIntegral sz)
+        eof <- {# call channel_eof #} (toPointer ch)
+        let newGot = got + fromIntegral sz
+        if  (eof == 1) || (newGot == fromIntegral fileSize)
+          then do
+               return isz
+          else do
+               rest <- go newGot
+               return $ isz + rest
+  in go 0
 
 {# fun channel_eof as channelIsEOF
   { toPointer `Channel' } -> `Bool' handleBool* #}

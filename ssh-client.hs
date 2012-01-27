@@ -18,7 +18,10 @@ runCommand login host port command =
   ssh login host port $ \ch -> do
       channelExecute ch command
       result <- readAllChannel ch
-      putStrLn (decodeString result)
+      let r = decodeString result
+      print (length result)
+      print (length r)
+      putStrLn r
 
 sendFile login host port path = do
   initialize True

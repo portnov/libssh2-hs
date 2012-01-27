@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface, DeriveDataTypeable, FlexibleInstances, TypeFamilies #-}
+{-# LANGUAGE ForeignFunctionInterface, DeriveDataTypeable, FlexibleInstances, TypeFamilies, MultiParamTypeClasses #-}
 
 #include <libssh2.h>
 
@@ -93,40 +93,40 @@ data NULL_POINTER = NULL_POINTER
 
 instance Exception NULL_POINTER
 
-class CIntResult a where
-  type IntResult a
-
+class HasCInt a where
   intResult :: a -> CInt
-  fromCInt :: a -> IntResult a
 
-instance CIntResult CInt where
-  type IntResult CInt = Int
+class (HasCInt a) => CIntResult a b where
+  fromCInt :: a -> b
 
+instance HasCInt CInt where
   intResult = id
+
+instance (Num b) => CIntResult CInt b where
   fromCInt = fromIntegral
 
-instance CIntResult CLong where
-  type IntResult CLong = Int
-
+instance HasCInt CLong where
   intResult = fromIntegral
+
+instance (Num b) => CIntResult CLong b where
   fromCInt = fromIntegral
 
-instance (Integral i) => CIntResult (i, a) where
-  type IntResult (i, a) = (Int, a)
-
+instance (Integral i) => HasCInt (i, a) where
   intResult (i, _) = fromIntegral i
+  
+instance (Integral i, Num b) => CIntResult (i, a) (b, a) where
   fromCInt (i, a) = (fromIntegral i, a)
 
-instance CIntResult (CInt, a, b) where
-  type IntResult (CInt, a, b) = (Int, a, b)
-
+instance HasCInt (CInt, a, b) where
   intResult (i, _, _) = i
+
+instance (Num j) => CIntResult (CInt, a, b) (j, a, b) where
   fromCInt (i, a, b) = (fromIntegral i, a, b)
 
-instance CIntResult (CInt, a, b, c) where
-  type IntResult (CInt, a, b, c) = (Int, a, b, c)
-
+instance HasCInt (CInt, a, b, c) where
   intResult (i, _, _, _) = i
+
+instance (Num j) => CIntResult (CInt, a, b, c) (j, a, b, c) where
   fromCInt (i, a, b, c) = (fromIntegral i, a, b, c)
 
 {# fun session_last_error as getLastError_
@@ -141,11 +141,12 @@ getLastError s = getLastError_ s nullPtr 0
 
 -- | Throw an exception if negative value passed,
 -- or return unchanged value.
-handleInt :: (CIntResult a) => a -> IO (IntResult a)
+handleInt :: (CIntResult a b) => a -> IO b
 handleInt x =
-  if intResult x < 0
-    then throw (int2error $ intResult x)
-    else return (fromCInt x)
+  let r = intResult x
+  in if r < 0
+       then throw (int2error r)
+       else return (fromCInt x)
 
 handleBool :: CInt -> IO Bool
 handleBool x
