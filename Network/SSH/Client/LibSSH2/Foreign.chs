@@ -43,6 +43,7 @@ import Network.Socket
 import Data.Bits
 import Data.Int
 import Data.Time.Clock.POSIX
+import Text.Printf
 
 import Network.SSH.Client.LibSSH2.Types
 import Network.SSH.Client.LibSSH2.Errors
@@ -246,27 +247,50 @@ readChannel c sz = readChannelEx c 0 sz
 writeChannel :: Channel -> String -> IO Int
 writeChannel ch str = writeChannelEx ch 0 str
 
--- | Write all data from channel to handle.
+{# fun channel_send_eof as channelSendEOF
+  { toPointer `Channel' } -> `Int' handleInt* #}
+
+-- | Write all data to channel from handle.
 -- Returns amount of transferred data.
-writeChannelFromHandle :: Channel -> Handle -> IO Integer
-writeChannelFromHandle ch handle = do
-    allocaBytes bufferSize $ \buffer ->
-        go handle buffer
-  where
-    go h buffer = do
+--writeChannelFromHandle :: Channel -> Handle -> IO Integer
+writeChannelFromHandle session ch handle = 
+  let
+    go h done fileSize buffer = do
       sz <- hGetBuf h buffer bufferSize
-      {# call channel_write_ex #}
-          (toPointer ch)
-          0
-          buffer
-          (fromIntegral bufferSize)
+      putStrLn $ printf ">> Done: %s / %s" (show done) (show fileSize)
+      putStrLn $ "read: " ++ show sz
+      putStrLn $ printf "Calling send 0 %s %s" (show sz) (show buffer)
+      sent <- send 0 (fromIntegral sz) buffer
+      let newDone = done + sent
       if sz < bufferSize
-        then return $ fromIntegral sz
+        then do
+             --channelSendEOF ch
+             return $ fromIntegral sz
         else do
-             rest <- go h buffer
+             rest <- go h newDone  fileSize buffer
              return $ fromIntegral sz + rest
+    
+    send written 0 _ = return written
+    send written size buffer = do
+      putStrLn $ printf "channel_write_ex ch 0 %s %s" (show $ plusPtr buffer written) (show size)
+      sent <- {# call channel_write_ex #}
+                  (toPointer ch)
+                  0
+                  (plusPtr buffer written)
+                  (fromIntegral size)
+      putStrLn $ printf "sent: %s, remained: %s" (show sent) (show $ size - sent)
+      when (sent < 0) $ do
+          throw (int2error sent)
+      putStrLn $ printf "send again: %s %s %s" (show $ written + fromIntegral sent) (show $ size - sent) (show buffer)
+      send (written + fromIntegral sent) (size - sent) buffer
 
     bufferSize = 0x100000
+
+  in do
+    fileSize <- hFileSize handle
+    {# call trace #} (toPointer session) (512)
+    allocaBytes bufferSize $ \buffer ->
+        go handle 0 fileSize buffer
 
 -- | Read all data from channel to handle.
 -- Returns amount of transferred data.

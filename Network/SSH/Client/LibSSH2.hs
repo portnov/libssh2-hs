@@ -120,7 +120,7 @@ scpSendFile s mode local remote = do
   h <- openFile local ReadMode
   size <- hFileSize h
   ch <- scpSendChannel s remote mode (fromIntegral size) 0 0
-  result <- writeChannelFromHandle ch h
+  result <- writeChannelFromHandle s ch h
   hClose h
   closeChannel ch
   freeChannel ch
