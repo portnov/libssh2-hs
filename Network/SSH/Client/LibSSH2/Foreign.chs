@@ -292,9 +292,6 @@ writeChannelFromHandle session ch handle =
   let
     go h done fileSize buffer = do
       sz <- hGetBuf h buffer bufferSize
-      putStrLn $ printf ">> Done: %s / %s" (show done) (show fileSize)
-      putStrLn $ "read: " ++ show sz
-      putStrLn $ printf "Calling send 0 %s %s" (show sz) (show buffer)
       sent <- send 0 (fromIntegral sz) buffer
       let newDone = done + sent
       if sz < bufferSize
@@ -307,16 +304,13 @@ writeChannelFromHandle session ch handle =
     
     send written 0 _ = return written
     send written size buffer = do
-      putStrLn $ printf "channel_write_ex ch 0 %s %s" (show $ plusPtr buffer written) (show size)
       sent <- {# call channel_write_ex #}
                   (toPointer ch)
                   0
                   (plusPtr buffer written)
                   (fromIntegral size)
-      putStrLn $ printf "sent: %s, remained: %s" (show sent) (show $ size - sent)
       when (sent < 0) $ do
           throw (int2error sent)
-      putStrLn $ printf "send again: %s %s %s" (show $ written + fromIntegral sent) (show $ size - sent) (show buffer)
       send (written + fromIntegral sent) (size - sent) buffer
 
     bufferSize = 0x100000
