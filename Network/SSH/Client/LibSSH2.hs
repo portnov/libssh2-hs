@@ -13,6 +13,8 @@ module Network.SSH.Client.LibSSH2
    retryIfNeeded,
    scpSendFile,
    scpReceiveFile,
+   runShellCommands,
+   execCommands,
 
    -- * Utilities
    socketConnect
@@ -104,7 +106,6 @@ checkHost s host port path = do
   kh <- initKnownHosts s
   knownHostsReadFile kh path
   (hostkey, keylen, keytype) <- getHostKey s
-  putStrLn $ "Host key: " ++ hostkey
   result <- checkKnownHost kh host port hostkey [TYPE_PLAIN, KEYENC_RAW]
   freeKnownHosts kh
   return result
@@ -124,17 +125,39 @@ withChannel s fn = do
 readAllChannel :: Channel -> IO String
 readAllChannel ch = do
     (sz, res) <- readChannel ch 0x400
-    putStrLn $ "---- >> Read: " ++ show sz ++ " / " ++ show (length res)
-    when (sz == 0) $
-      putStrLn $ "  :: " ++ take 20 res ++ "..."
     if sz > 0
       then do
            rest <- readAllChannel ch
-           putStrLn $ "---- >> Received: " ++ show (length rest)
            return $ res ++ rest
-      else if sz < 0
-             then throw (int2error sz)
-             else return ""
+      else return ""
+
+runShellCommands :: Session -> [String] -> IO (Int, [String])
+runShellCommands s commands = do
+  ch <- openChannelSession s
+  requestPTY ch "linux"
+  channelShell ch
+  hello <- readAllChannel ch
+  out <- forM commands $ \cmd -> do
+             writeChannel ch (cmd ++ "\n")
+             r <- readAllChannel ch
+             return r
+  channelSendEOF ch
+  closeChannel ch
+  exitStatus <- channelExitStatus ch
+  freeChannel ch
+  return (exitStatus, out)
+
+execCommands :: Session -> [String] -> IO (Int, [String])
+execCommands s commands = do
+  ch <- openChannelSession s
+  out <- forM commands $ \cmd -> do
+             channelExecute ch cmd
+             readAllChannel ch
+  closeChannel ch
+  exitStatus <- channelExitStatus ch
+  freeChannel ch
+  return (exitStatus, out)
+
 
 -- | Send a file to remote host via SCP.
 -- Returns size of sent data.

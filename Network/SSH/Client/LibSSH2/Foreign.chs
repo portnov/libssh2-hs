@@ -15,6 +15,7 @@ module Network.SSH.Client.LibSSH2.Foreign
    initSession, freeSession, disconnectSession,
    handshake,
    blockedDirections,
+   setBlocking,
    
    -- * Known hosts functions
    initKnownHosts, freeKnownHosts, knownHostsReadFile,
@@ -25,9 +26,11 @@ module Network.SSH.Client.LibSSH2.Foreign
 
    -- * Channel functions
    openChannelSession, closeChannel, freeChannel,
+   channelSendEOF,
    readChannel, writeChannel,
    writeChannelFromHandle, readChannelToHandle,
    channelProcess, channelExecute, channelShell,
+   requestPTY, requestPTYEx,
    channelExitStatus, channelExitSignal,
    scpSendChannel, scpReceiveChannel,
 
@@ -146,6 +149,13 @@ disconnectSession :: Session
                   -> IO Int
 disconnectSession s msg = disconnectSessionEx s 11 msg ""
 
+{# fun session_set_blocking as setBlocking
+  { toPointer `Session', bool2int `Bool' } -> `()' #}
+
+bool2int :: Bool -> CInt
+bool2int True  = 1
+bool2int False = 0
+
 -- | Run SSH handshake on network socket.
 {# fun session_handshake as handshake
   { toPointer `Session', ssh2socket `Socket' } -> `Int' handleInt* #}
@@ -223,8 +233,24 @@ channelExecute :: Channel -> String -> IO Int
 channelExecute c command = channelProcess c "exec" command
 
 -- | Execute shell command
-channelShell :: Channel -> String -> IO Int
-channelShell c command = channelProcess c "shell" command
+channelShell :: Channel -> IO Int
+channelShell c = do
+  withCStringLenIntConv "shell" $ \(kindptr, kindlen) ->
+    {# call channel_process_startup #}
+      (toPointer c)
+      kindptr
+      kindlen
+      nullPtr 0 >>= handleInt
+
+{# fun channel_request_pty_ex as requestPTYEx
+  { toPointer `Channel',
+    `String' &,
+    `String' &,
+    `Int', `Int',
+    `Int', `Int' } -> `Int' handleInt* #}
+
+requestPTY :: Channel -> String -> IO Int
+requestPTY ch term = requestPTYEx ch term "" 0 0 0 0
 
 readChannelEx :: Channel -> Int -> Size -> IO (SSize, String)
 readChannelEx ch i size =
