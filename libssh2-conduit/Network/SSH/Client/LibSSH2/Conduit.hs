@@ -63,57 +63,108 @@ splitLines =
       where
         bs = front ""
 
-execCommand :: Maybe (TMVar Int) -> Session -> String -> IO [String]
-execCommand var s cmd = do
-  res <- runResourceT $ lazyConsume $ execCommandS var s cmd $= splitLines
-  return res
+execCommand :: Bool -> Session -> String -> IO (CommandsHandle, [String])
+execCommand b s cmd = do
+  (ch, channel) <- initCH b s
+  res <- runResourceT $ lazyConsume $ execCommandS ch channel cmd $= splitLines
+  return (ch, res)
 
-execCommands :: Maybe (TMVar Int) -> Session -> [String] -> IO [String]
-execCommands var s cmds = do
-  let srcs = [execCommandS (v i) s cmd | (i, cmd) <- zip [1..] cmds ]
-      v i | i == length cmds = var
-          | otherwise        = Nothing
-  res <- runResourceT $ lazyConsume $ mconcat srcs $= splitLines
-  return res
+-- execCommands :: Bool -> Session -> [String] -> IO [String]
+-- execCommands b s cmds = do
+--   let srcs = [execCommandS (v i) s cmd | (i, cmd) <- zip [1..] cmds ]
+--       v i | i == length cmds = var
+--           | otherwise        = Nothing
+--   res <- runResourceT $ lazyConsume $ mconcat srcs $= splitLines
+--   return res
 
-execCommandS :: Maybe (TMVar Int) -> Session -> String -> Source IO String
-execCommandS var s command =
+data CommandsHandle = CommandsHandle {
+  chReturnCode :: Maybe (TMVar Int),
+  chChannel :: TMVar Channel,
+  chChannelClosed :: TVar Bool }
+
+initCH :: Bool -> Session -> IO (CommandsHandle, Channel)
+initCH False s = do
+  c <- newTVarIO False
+  ch <- newEmptyTMVarIO
+  channel <- openCH ch s
+  return (CommandsHandle Nothing ch c, channel)
+initCH True s = do
+  r <- newEmptyTMVarIO
+  c <- newTVarIO False
+  ch <- newEmptyTMVarIO
+  channel <- openCH ch s
+  return (CommandsHandle (Just r) ch c, channel)
+
+openCH :: TMVar Channel -> Session -> IO Channel
+openCH var s = do
+      ch <- openChannelSession s
+      atomically $ putTMVar var ch
+      putStrLn "channel is open"
+      return ch
+
+getReturnCode :: CommandsHandle -> IO Int
+getReturnCode ch = do
+  c <- atomically $ readTVar (chChannelClosed ch)
+  if c
+    then do
+      case chReturnCode ch of
+        Nothing -> fail "Channel already closed and no exit code return was set up for command."
+        Just v -> atomically $ takeTMVar v
+    else do
+      putStrLn "getting channel"
+      channel <- atomically $ takeTMVar (chChannel ch)
+      putStrLn "calling channel cleanup"
+      cleanupChannel ch channel
+      putStrLn "logging channel is closed."
+      atomically $ writeTVar (chChannelClosed ch) True
+      putStrLn "channel closed ok"
+      case chReturnCode ch of
+        Nothing -> fail "No exit code return was set up for commnand."
+        Just v  -> do
+                   putStrLn "getting return code"
+                   rc <- atomically $ takeTMVar v
+                   putStrLn $ "return code got: " ++ show rc
+                   return rc
+    
+execCommandS :: CommandsHandle -> Channel -> String -> Source IO String
+execCommandS var channel command =
   Source {
-      sourcePull = do
-        (key, st) <- withIO start (const $ return ())
-        pull key st 
+      sourcePull = pull channel 
     , sourceClose = return () }
   where
-    start = do
-      ch <- openChannelSession s
-      return ch
     
-    next key ch =
-      Source (pullAnswer key ch) $ do
+    next ch =
+      Source (pullAnswer ch) $ do
           return ()
-          --liftIO $ cleanup ch
-          --release key
+          --liftIO $ cleanupChannel var ch
 
-    pullAnswer key ch = do
+    pullAnswer ch = do
       (sz, res) <- liftIO $ readChannel ch 0x400
       if sz > 0
-        then return $ Open (next key ch) res
+        then return $ Open (next ch) res
         else do
-             liftIO $ cleanup ch
+             liftIO $ cleanupChannel var ch
              return Closed
 
-    pull key ch = do
+    pull ch = do
       liftIO $ channelExecute ch command
-      pullAnswer key ch
+      pullAnswer ch
 
-    cleanup ch = do
-      closeChannel ch
-      case var of
-        Nothing -> return ()
-        Just v  -> do
-                   exitStatus <- channelExitStatus ch
-                   atomically $ putTMVar v exitStatus
-      closeChannel ch
-      freeChannel ch
-      return ()
+cleanupChannel :: CommandsHandle -> Channel -> IO ()
+cleanupChannel ch channel = do
+  c <- atomically $ readTVar (chChannelClosed ch)
+  when (not c) $ do
+    closeChannel channel
+    case chReturnCode ch of
+      Nothing -> return ()
+      Just v  -> do
+                 exitStatus <- channelExitStatus channel
+                 putStrLn $ "putting exit status: " ++ show exitStatus
+                 atomically $ putTMVar v exitStatus
+                 putStrLn $ "exit status put."
+    closeChannel channel
+    freeChannel channel
+    atomically $ writeTVar (chChannelClosed ch) True
+    putStrLn $ "channel cleanup done."
+    return ()
 

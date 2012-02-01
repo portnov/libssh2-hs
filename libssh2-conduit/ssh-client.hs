@@ -26,9 +26,8 @@ ssh login host port command = do
   withSessionBlocking host port $ \session -> do
     r <- checkHost session host port known_hosts
     publicKeyAuthFile session login public private ""
-    var <- newEmptyTMVarIO
-    res <- execCommand (Just var) session command
+    (ch, res) <- execCommand True session command
     forM (map decodeString res) putStrLn
-    rc <- atomically $ takeTMVar var
+    rc <- getReturnCode ch
     putStrLn $ "Exit code: " ++ show rc
   exit
