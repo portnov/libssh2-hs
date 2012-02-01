@@ -7,7 +7,6 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Resource
 import Control.Concurrent.STM
 import Data.Conduit
-import qualified Data.ByteString as B
 
 import Network.SSH.Client.LibSSH2.Foreign
 import Network.SSH.Client.LibSSH2

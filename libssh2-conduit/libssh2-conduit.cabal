@@ -1,0 +1,43 @@
+Name:                libssh2-conduit
+Version:             0.1
+
+Synopsis:            Conduit wrappers for libssh2 FFI bindings (see libssh2 package).
+
+Description:         This package provides Conduit interface (see conduit package) for
+                     libssh2 FFI bindings (see libssh2 package). This allows one to
+                     receive data from SSH channels lazily, without need to read
+                     all channel output to the memory.
+
+Homepage:            http://redmine.iportnov.ru/projects/libssh2-hs
+
+License:             BSD3
+
+License-file:        LICENSE
+
+Author:              IlyaPortnov
+
+-- An email address to which users can send suggestions, bug reports,
+-- and patches.
+Maintainer:          portnov84@rambler.ru
+
+-- A copyright notice.
+-- Copyright:           
+
+Category:            Network
+
+Build-type:          Simple
+
+Extra-source-files:  Makefile, ssh-client.hs
+
+-- Constraint on the version of Cabal needed to build this package.
+Cabal-version:       >=1.6
+
+Library
+  Exposed-modules:     Network.SSH.Client.LibSSH2.Conduit
+  
+  Build-depends:       base >= 4 && <5, stm, transformers,
+                       conduit >= 0.2.0, libssh2
+  
+  -- Modules not exported by this package.
+  -- Other-modules:       
+  
