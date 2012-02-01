@@ -1,5 +1,11 @@
 {-# LANGUAGE FlexibleContexts #-}
-module Network.SSH.Client.LibSSH2.Conduit where
+module Network.SSH.Client.LibSSH2.Conduit
+  (sourceChannel,
+   splitLines,
+   CommandsHandle,
+   execCommand,
+   getReturnCode
+  ) where
 
 import Control.Monad
 import Control.Monad.IO.Class (liftIO)
@@ -10,24 +16,12 @@ import System.IO.Unsafe (unsafeInterleaveIO)
 import Control.Concurrent.STM
 import Data.Monoid
 import Data.Conduit
--- import Data.Conduit.List as CL
+import Data.Conduit.Lazy
 
 import Network.SSH.Client.LibSSH2.Foreign
 import Network.SSH.Client.LibSSH2
 
-lazyConsume :: MonadBaseControl IO m => Source m a -> ResourceT m [a]
-lazyConsume src0 = do
-    go src0
-  where
-
-    go src = liftBaseOp_ unsafeInterleaveIO $ do
-        res <- sourcePull src
-        case res of
-            Closed -> sourceClose src >> return []
-            Open src' x -> do
-                y <- go src'
-                return $ x : y
-
+-- | Read all contents of libssh2's Channel.
 sourceChannel :: Channel -> Source IO String
 sourceChannel ch = src
   where
@@ -41,6 +35,7 @@ sourceChannel ch = src
 
     close = return ()
 
+-- | Similar to Data.Conduit.Binary.lines, but for Strings.
 splitLines :: Resource m => Conduit String m String
 splitLines =
     conduitState id push close
@@ -63,7 +58,15 @@ splitLines =
       where
         bs = front ""
 
-execCommand :: Bool -> Session -> String -> IO (CommandsHandle, [String])
+-- | Execute one command and read it's output lazily.
+-- If first argument is True, then you *must* get return code
+-- using getReturnCode on returned CommandsHandle. Moreover,
+-- you *must* guarantee that getReturnCode will be called
+-- only when all command output will be read.
+execCommand :: Bool                          -- ^ Set to True if you want to get return code when command will terminate.
+            -> Session
+            -> String                        -- ^ Command
+            -> IO (CommandsHandle, [String])
 execCommand b s cmd = do
   (ch, channel) <- initCH b s
   res <- runResourceT $ lazyConsume $ execCommandS ch channel cmd $= splitLines
@@ -77,6 +80,7 @@ execCommand b s cmd = do
 --   res <- runResourceT $ lazyConsume $ mconcat srcs $= splitLines
 --   return res
 
+-- | Handles channel opening and closing.
 data CommandsHandle = CommandsHandle {
   chReturnCode :: Maybe (TMVar Int),
   chChannel :: TMVar Channel,
@@ -101,6 +105,9 @@ openCH var s = do
       atomically $ putTMVar var ch
       return ch
 
+-- | Get return code for previously run command.
+-- It will fail if command was run using execCommand False.
+-- Should be called only when all command output is read.
 getReturnCode :: CommandsHandle -> IO Int
 getReturnCode ch = do
   c <- atomically $ readTVar (chChannelClosed ch)
@@ -143,6 +150,7 @@ execCommandS var channel command =
       liftIO $ channelExecute ch command
       pullAnswer ch
 
+-- | Close Channel and write return code
 cleanupChannel :: CommandsHandle -> Channel -> IO ()
 cleanupChannel ch channel = do
   c <- atomically $ readTVar (chChannelClosed ch)
