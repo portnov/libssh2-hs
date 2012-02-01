@@ -36,6 +36,7 @@ Library
   Exposed-modules:     Network.SSH.Client.LibSSH2.Conduit
   
   Build-depends:       base >= 4 && <5, stm, transformers,
+                       monad-control >= 0.3.1,
                        conduit >= 0.2.0, libssh2
   
   -- Modules not exported by this package.
