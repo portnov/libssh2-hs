@@ -27,7 +27,7 @@ ssh login host port command = do
     r <- checkHost session host port known_hosts
     publicKeyAuthFile session login public private ""
     var <- newEmptyTMVarIO
-    res <- execCommand var session command
+    res <- execCommand (Just var) session command
     forM (map decodeString res) putStrLn
     rc <- atomically $ takeTMVar var
     putStrLn $ "Exit code: " ++ show rc

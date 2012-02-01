@@ -8,6 +8,7 @@ import Control.Monad.Trans.Resource
 import Control.Monad.Trans.Control
 import System.IO.Unsafe (unsafeInterleaveIO)
 import Control.Concurrent.STM
+import Data.Monoid
 import Data.Conduit
 -- import Data.Conduit.List as CL
 
@@ -62,12 +63,20 @@ splitLines =
       where
         bs = front ""
 
-execCommand :: TMVar Int -> Session -> String -> IO [String]
+execCommand :: Maybe (TMVar Int) -> Session -> String -> IO [String]
 execCommand var s cmd = do
   res <- runResourceT $ lazyConsume $ execCommandS var s cmd $= splitLines
   return res
 
-execCommandS :: TMVar Int -> Session -> String -> Source IO String
+execCommands :: Maybe (TMVar Int) -> Session -> [String] -> IO [String]
+execCommands var s cmds = do
+  let srcs = [execCommandS (v i) s cmd | (i, cmd) <- zip [1..] cmds ]
+      v i | i == length cmds = var
+          | otherwise        = Nothing
+  res <- runResourceT $ lazyConsume $ mconcat srcs $= splitLines
+  return res
+
+execCommandS :: Maybe (TMVar Int) -> Session -> String -> Source IO String
 execCommandS var s command =
   Source {
       sourcePull = do
@@ -96,8 +105,11 @@ execCommandS var s command =
 
     cleanup ch = do
       closeChannel ch
-      exitStatus <- channelExitStatus ch
-      atomically $ putTMVar var exitStatus
+      case var of
+        Nothing -> return ()
+        Just v  -> do
+                   exitStatus <- channelExitStatus ch
+                   atomically $ putTMVar v exitStatus
       closeChannel ch
       freeChannel ch
       return ()
