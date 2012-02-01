@@ -99,7 +99,6 @@ openCH :: TMVar Channel -> Session -> IO Channel
 openCH var s = do
       ch <- openChannelSession s
       atomically $ putTMVar var ch
-      putStrLn "channel is open"
       return ch
 
 getReturnCode :: CommandsHandle -> IO Int
@@ -111,19 +110,13 @@ getReturnCode ch = do
         Nothing -> fail "Channel already closed and no exit code return was set up for command."
         Just v -> atomically $ takeTMVar v
     else do
-      putStrLn "getting channel"
       channel <- atomically $ takeTMVar (chChannel ch)
-      putStrLn "calling channel cleanup"
       cleanupChannel ch channel
-      putStrLn "logging channel is closed."
       atomically $ writeTVar (chChannelClosed ch) True
-      putStrLn "channel closed ok"
       case chReturnCode ch of
         Nothing -> fail "No exit code return was set up for commnand."
         Just v  -> do
-                   putStrLn "getting return code"
                    rc <- atomically $ takeTMVar v
-                   putStrLn $ "return code got: " ++ show rc
                    return rc
     
 execCommandS :: CommandsHandle -> Channel -> String -> Source IO String
@@ -159,12 +152,9 @@ cleanupChannel ch channel = do
       Nothing -> return ()
       Just v  -> do
                  exitStatus <- channelExitStatus channel
-                 putStrLn $ "putting exit status: " ++ show exitStatus
                  atomically $ putTMVar v exitStatus
-                 putStrLn $ "exit status put."
     closeChannel channel
     freeChannel channel
     atomically $ writeTVar (chChannelClosed ch) True
-    putStrLn $ "channel cleanup done."
     return ()
 
