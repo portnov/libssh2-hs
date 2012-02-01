@@ -62,8 +62,7 @@ withSSH2 :: FilePath          -- ^ Path to known_hosts file
 withSSH2 known_hosts public private login hostname port fn =
   withSessionBlocking hostname port $ \s -> do
     r <- checkHost s hostname port known_hosts
-    print r
-    a <- publicKeyAuthFile s login public private ""
+    publicKeyAuthFile s login public private ""
     withChannel s $ fn
 
 -- | Execute some actions within SSH2 session
