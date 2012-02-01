@@ -107,7 +107,6 @@ execCommandS var s command =
       pullAnswer key ch
 
     cleanup ch = do
-      putStrLn "channel cleanup"
       closeChannel ch
       case var of
         Nothing -> return ()
