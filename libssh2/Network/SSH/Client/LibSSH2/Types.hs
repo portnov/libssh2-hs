@@ -25,10 +25,10 @@ import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.C.String
 
-type Size = (CUInt)
+type Size = (CULong)
 {-# LINE 24 "Network/SSH/Client/LibSSH2/Types.chs" #-}
 
-type SSize = (CInt)
+type SSize = (CLong)
 {-# LINE 26 "Network/SSH/Client/LibSSH2/Types.chs" #-}
 
 type CStringCLen i = (CString, i)
