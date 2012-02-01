@@ -1,8 +1,8 @@
 
 import Control.Monad
 import Control.Monad.Trans.Resource
+import Control.Concurrent.STM
 import Data.Conduit
-import Data.Conduit.Lazy
 import System.Environment
 import System.FilePath
 import Codec.Binary.UTF8.String
@@ -26,6 +26,9 @@ ssh login host port command = do
   withSessionBlocking host port $ \session -> do
     r <- checkHost session host port known_hosts
     publicKeyAuthFile session login public private ""
-    res <- runResourceT $ lazyConsume $ execCommand session command
+    var <- newEmptyTMVarIO
+    res <- execCommand var session command
     forM (map decodeString res) putStrLn
+    rc <- atomically $ takeTMVar var
+    putStrLn $ "Exit code: " ++ show rc
   exit
