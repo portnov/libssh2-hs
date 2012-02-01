@@ -30,7 +30,7 @@ splitLines = conduitState "" push close
     push st input =
       case lines input of
         [] -> return $ StateProducing "" [st]
-        [s1,s2] -> return $ StateProducing s2 [s1]
+        [s]  -> return $ StateProducing "" [st ++ s]
         (h:t) -> return $ StateProducing (last t) ((st ++ h): init t)
 
     close st = return [st]

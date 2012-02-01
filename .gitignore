@@ -5,7 +5,7 @@
 *.chs.h
 dist/
 cabal-dev/
-Network/SSH/Client/LibSSH2/Foreign.hs
-Network/SSH/Client/LibSSH2/Types.hs
-Network/SSH/Client/LibSSH2/Errors.hs
+libssh2/Network/SSH/Client/LibSSH2/Foreign.hs
+libssh2/Network/SSH/Client/LibSSH2/Types.hs
+libssh2/Network/SSH/Client/LibSSH2/Errors.hs
 ssh-client
