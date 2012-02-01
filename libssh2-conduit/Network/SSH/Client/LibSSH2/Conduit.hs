@@ -80,7 +80,7 @@ execCommandS :: Maybe (TMVar Int) -> Session -> String -> Source IO String
 execCommandS var s command =
   Source {
       sourcePull = do
-        (key, st) <- withIO start cleanup
+        (key, st) <- withIO start (const $ return ())
         pull key st 
     , sourceClose = return () }
   where
@@ -90,13 +90,16 @@ execCommandS var s command =
     
     next key ch =
       Source (pullAnswer key ch) $ do
-          liftIO $ cleanup ch
+          return ()
+          --liftIO $ cleanup ch
+          --release key
 
     pullAnswer key ch = do
       (sz, res) <- liftIO $ readChannel ch 0x400
       if sz > 0
         then return $ Open (next key ch) res
         else do
+             liftIO $ cleanup ch
              return Closed
 
     pull key ch = do
@@ -104,6 +107,7 @@ execCommandS var s command =
       pullAnswer key ch
 
     cleanup ch = do
+      putStrLn "channel cleanup"
       closeChannel ch
       case var of
         Nothing -> return ()
