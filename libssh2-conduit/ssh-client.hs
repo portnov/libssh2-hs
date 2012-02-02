@@ -3,6 +3,7 @@ import Control.Monad
 import Control.Monad.Trans.Resource
 import Control.Concurrent.STM
 import Data.Conduit
+import Data.Conduit.Lazy
 import System.Environment
 import System.FilePath
 import Codec.Binary.UTF8.String
@@ -26,7 +27,8 @@ ssh login host port command = do
   withSessionBlocking host port $ \session -> do
     r <- checkHost session host port known_hosts
     publicKeyAuthFile session login public private ""
-    (ch, res) <- execCommand True session command
+    (Just ch, src) <- execCommand True session command
+    res <- runResourceT $ lazyConsume src
     forM (map decodeString res) putStrLn
     rc <- getReturnCode ch
     putStrLn $ "Exit code: " ++ show rc

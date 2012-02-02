@@ -66,11 +66,11 @@ splitLines =
 execCommand :: Bool                          -- ^ Set to True if you want to get return code when command will terminate.
             -> Session
             -> String                        -- ^ Command
-            -> IO (CommandsHandle, [String])
+            -> IO (Maybe CommandsHandle, Source IO String) 
 execCommand b s cmd = do
   (ch, channel) <- initCH b s
-  res <- runResourceT $ lazyConsume $ execCommandS ch channel cmd $= splitLines
-  return (ch, res)
+  let src = execCommandS ch channel cmd $= splitLines
+  return (if b then Just ch else Nothing, src)
 
 -- execCommands :: Bool -> Session -> [String] -> IO [String]
 -- execCommands b s cmds = do
