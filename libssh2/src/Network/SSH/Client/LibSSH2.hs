@@ -47,13 +47,13 @@ withSSH2 :: FilePath          -- ^ Path to known_hosts file
          -> String            -- ^ Remote user name
          -> String            -- ^ Remote host name
          -> Int               -- ^ Remote port number (usually 22)
-         -> (Channel -> IO a) -- ^ Actions to perform on channel
-         -> IO (Int, a)
+         -> (Session -> IO a) -- ^ Actions to perform on session 
+         -> IO a 
 withSSH2 known_hosts public private login hostname port fn =
   withSession hostname port $ \s -> do
     r <- checkHost s hostname port known_hosts
     publicKeyAuthFile s login public private ""
-    withChannel s $ fn
+    fn s
 
 -- | Execute some actions within SSH2 session
 withSession :: String            -- ^ Remote host name
