@@ -1,4 +1,4 @@
-
+import qualified Data.ByteString.Lazy as BSL
 import System.Environment
 import System.FilePath
 import Codec.Binary.UTF8.String
@@ -15,43 +15,21 @@ main = do
     _ -> putStrLn "Synopsis: ssh-client USERNAME HOSTNAME PORT COMMAND"
 
 runCommand login host port command =
-  ssh login host port $ \ch -> do
+  ssh login host port $ \s -> 
+    withChannel s $ \ch -> do
       channelExecute ch command
       result <- readAllChannel ch
-      let r = decodeString result
-      print (length result)
-      print (length r)
-      putStrLn r
+      BSL.putStr result
 
-sendFile login host port path = do
-  initialize True
-  home <- getEnv "HOME"
-  let known_hosts = home </> ".ssh" </> "known_hosts"
-      public = home </> ".ssh" </> "id_rsa.pub"
-      private = home </> ".ssh" </> "id_rsa"
+sendFile login host port path = 
+  ssh login host port $ \s -> do
+    sz <- scpSendFile s 0o644 path (takeFileName path)
+    putStrLn $ "Sent: " ++ show sz ++ " bytes."
 
-  withSession host port $ \_ s -> do
-      r <- checkHost s host port known_hosts
-      print r
-      publicKeyAuthFile s login public private ""
-      sz <- scpSendFile s 0o644 path (takeFileName path)
-      putStrLn $ "Sent: " ++ show sz ++ " bytes."
-  exit
-
-receiveFile login host port path = do
-  initialize True
-  home <- getEnv "HOME"
-  let known_hosts = home </> ".ssh" </> "known_hosts"
-      public = home </> ".ssh" </> "id_rsa.pub"
-      private = home </> ".ssh" </> "id_rsa"
-
-  withSession host port $ \_ s -> do
-      r <- checkHost s host port known_hosts
-      print r
-      publicKeyAuthFile s login public private ""
-      sz <- scpReceiveFile s (takeFileName path) path
-      putStrLn $ "Received: " ++ show sz ++ " bytes."
-  exit
+receiveFile login host port path = 
+  ssh login host port $ \s -> do
+    sz <- scpReceiveFile s (takeFileName path) path
+    putStrLn $ "Received: " ++ show sz ++ " bytes."
 
 ssh login host port actions = do
   initialize True
@@ -59,5 +37,5 @@ ssh login host port actions = do
   let known_hosts = home </> ".ssh" </> "known_hosts"
       public = home </> ".ssh" </> "id_rsa.pub"
       private = home </> ".ssh" </> "id_rsa"
-  withSSH2 known_hosts public private login host port $ actions
+  withSSH2 known_hosts public private "" login host port $ actions
   exit

@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface, DeriveDataTypeable, FlexibleInstances, TypeFamilies, MultiParamTypeClasses #-}
+{-# LANGUAGE ForeignFunctionInterface, DeriveDataTypeable, FlexibleInstances #-}
 
 #include <libssh2.h>
 
@@ -10,23 +10,26 @@ module Network.SSH.Client.LibSSH2.Errors
    NULL_POINTER,
 
    -- * Utilities
-   CIntResult (..),
+   IntResult (..),
 
    -- * Functions
    getLastError,
    handleInt,
    handleBool,
    handleNullPtr,
-   int2error
+   int2error, error2int,
+   blockedDirections,
+   threadWaitSession
   ) where
 
 import Control.Exception
 import Data.Generics
 import Foreign
-import Foreign.Ptr
 import Foreign.C.Types
+import Control.Monad (when)
 
 import Network.SSH.Client.LibSSH2.Types
+import Network.SSH.Client.LibSSH2.WaitSocket
 
 -- | Error codes returned by libssh2.
 data ErrorCode =
@@ -93,41 +96,23 @@ data NULL_POINTER = NULL_POINTER
 
 instance Exception NULL_POINTER
 
-class HasCInt a where
-  intResult :: a -> CInt
+class IntResult a where
+  intResult :: a -> Int
 
-class (HasCInt a) => CIntResult a b where
-  fromCInt :: a -> b
-
-instance HasCInt CInt where
+instance IntResult Int where
   intResult = id
 
-instance (Num b) => CIntResult CInt b where
-  fromCInt = fromIntegral
+instance IntResult (Int, a) where
+  intResult = fst
 
-instance HasCInt CLong where
+instance IntResult (Int, a, b) where
+  intResult = \(i, _, _) -> i
+
+instance IntResult (Int, a, b, c) where
+  intResult = \(i, _, _, _) -> i
+
+instance IntResult CLong where
   intResult = fromIntegral
-
-instance (Num b) => CIntResult CLong b where
-  fromCInt = fromIntegral
-
-instance (Integral i) => HasCInt (i, a) where
-  intResult (i, _) = fromIntegral i
-  
-instance (Integral i, Num b) => CIntResult (i, a) (b, a) where
-  fromCInt (i, a) = (fromIntegral i, a)
-
-instance HasCInt (CInt, a, b) where
-  intResult (i, _, _) = i
-
-instance (Num j) => CIntResult (CInt, a, b) (j, a, b) where
-  fromCInt (i, a, b) = (fromIntegral i, a, b)
-
-instance HasCInt (CInt, a, b, c) where
-  intResult (i, _, _, _) = i
-
-instance (Num j) => CIntResult (CInt, a, b, c) (j, a, b, c) where
-  fromCInt (i, a, b, c) = (fromIntegral i, a, b, c)
 
 {# fun session_last_error as getLastError_
   { toPointer `Session',
@@ -141,12 +126,15 @@ getLastError s = getLastError_ s nullPtr 0
 
 -- | Throw an exception if negative value passed,
 -- or return unchanged value.
-handleInt :: (CIntResult a b) => a -> IO b
-handleInt x =
+handleInt :: (IntResult a) => Maybe Session -> IO a -> IO a
+handleInt s io = do
+  x <- io
   let r = intResult x
-  in if r < 0
-       then throw (int2error r)
-       else return (fromCInt x)
+  if r < 0
+    then case int2error r of
+           EAGAIN -> threadWaitSession s >> handleInt s io
+           err    -> throwIO err
+    else return x 
 
 handleBool :: CInt -> IO Bool
 handleBool x
@@ -156,8 +144,30 @@ handleBool x
 
 -- | Throw an exception if null pointer passed,
 -- or return it casted to right type.
-handleNullPtr :: (IsPointer a) => Ptr () -> IO a
-handleNullPtr p
-  | p == nullPtr = throw NULL_POINTER
-  | otherwise    = return (fromPointer p)
+handleNullPtr :: Maybe Session -> (Ptr () -> IO a) -> IO (Ptr ()) -> IO a
+handleNullPtr s fromPointer io = do
+  p <- io
+  if p == nullPtr 
+    then case s of
+      Nothing -> throw NULL_POINTER
+      Just session -> do
+        (r, _) <- getLastError session
+        case int2error r of
+          EAGAIN -> threadWaitSession (Just session) >> handleNullPtr s fromPointer io
+          _      -> throw NULL_POINTER -- TODO: should we throw the error instead?
+    else fromPointer p
 
+-- | Get currently blocked directions
+{# fun session_block_directions as blockedDirections
+  { toPointer `Session' } -> `[Direction]' int2dir #}
+
+threadWaitSession :: Maybe Session -> IO ()
+threadWaitSession Nothing = error "EAGAIN thrown without session present"
+threadWaitSession (Just s) = do
+  mSocket <- sessionGetSocket s
+  case mSocket of
+    Nothing -> error "EAGAIN thrown on session without socket"
+    Just socket -> do 
+      dirs <- blockedDirections s
+      when (INBOUND `elem` dirs)  $ threadWaitRead socket
+      when (OUTBOUND `elem` dirs) $ threadWaitWrite socket

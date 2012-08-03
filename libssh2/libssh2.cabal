@@ -1,6 +1,6 @@
 Name:                libssh2
 
-Version:             0.1
+Version:             0.2
 
 Synopsis:            FFI bindings to libssh2 SSH2 client library (http://libssh2.org/)
 
@@ -26,24 +26,37 @@ Build-type:          Simple
 Extra-source-files:  ssh-client.hs, Makefile, include/libssh2_local.h
 
 -- Constraint on the version of Cabal needed to build this package.
-Cabal-version:       >=1.6
+Cabal-version:       >=1.8
 
+flag example-client
+  description: Build the example client
+  default: False
 
 Library
   Exposed-modules:     Network.SSH.Client.LibSSH2.Types
                        Network.SSH.Client.LibSSH2.Foreign
                        Network.SSH.Client.LibSSH2.Errors
+                       Network.SSH.Client.LibSSH2.WaitSocket
                        Network.SSH.Client.LibSSH2
   
   Include-dirs:        include
   Includes:            include/libssh2_local.h
 
   Build-depends:       base >= 4 && < 5, network >= 2.3,
-                       syb >= 0.3.3, time >= 1.2
+                       syb >= 0.3.3, time >= 1.2,
+                       bytestring >= 0.9
 
   Extra-libraries:     "ssh2"
+  GHC-Options:         -Wall
   
   -- Other-modules:       
   
   Build-tools:         c2hs
+  HS-Source-Dirs:      src
   
+Executable hs-ssh-client
+  if flag(example-client)
+    Build-depends: base, utf8-string, libssh2 >= 0.2, syb, network, filepath, bytestring
+  else
+    buildable: False
+  Main-Is: ssh-client.hs
