@@ -238,7 +238,8 @@ publicKeyAuthFile session username public private passphrase = void . handleInt 
 
 -- | Open a channel for session.
 openChannelSession :: Session -> IO Channel
-openChannelSession s = handleNullPtr channelFromPointer $ openSessionChannelEx s "session" 65536 32768 ""
+openChannelSession s = handleNullPtr (channelFromPointer s) $ 
+  openSessionChannelEx s "session" 65536 32768 ""
 
 channelProcess :: Channel -> String -> String -> IO Int
 channelProcess ch kind command = handleInt $
@@ -450,7 +451,7 @@ channelExitSignal ch = handleInt $ channelExitSignal_ ch nullPtr nullPtr nullPtr
 
 -- | Create SCP file send channel.
 scpSendChannel :: Session -> String -> Int -> Int64 -> POSIXTime -> POSIXTime -> IO Channel
-scpSendChannel session remotePath mode size mtime atime = handleNullPtr channelFromPointer $ 
+scpSendChannel session remotePath mode size mtime atime = handleNullPtr (channelFromPointer session) $ 
   scpSendChannel_ session remotePath mode size mtime atime
 
 type Offset = {# type off_t #}
@@ -463,6 +464,6 @@ scpReceiveChannel :: Session -> FilePath -> IO (Channel, Offset)
 scpReceiveChannel s path = do
   withCString path $ \pathptr ->
      allocaBytes {# sizeof stat_t #} $ \statptr -> do
-       channel <- handleNullPtr channelFromPointer $ {# call scp_recv #} (toPointer s) pathptr statptr
+       channel <- handleNullPtr (channelFromPointer s) $ {# call scp_recv #} (toPointer s) pathptr statptr
        size <- {# get stat_t->st_size #} statptr
        return (channel, size)

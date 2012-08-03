@@ -18,7 +18,8 @@ module Network.SSH.Client.LibSSH2.Types
    knownHostsFromPointer,
    sessionFromPointer,
    sessionGetSocket,
-   sessionSetSocket
+   sessionSetSocket,
+   channelSession
   ) where
 
 import Foreign
@@ -94,18 +95,22 @@ instance Show KnownHosts where
 instance ToPointer KnownHosts where
   toPointer (KnownHosts p) = castPtr p
 
-{# pointer *CHANNEL as Channel newtype #}
+{# pointer *CHANNEL as CChannel #}
 
-channelFromPointer :: Ptr () -> IO Channel
-channelFromPointer ptr = return $ Channel (castPtr ptr)
+data Channel = Channel { channelPtr     :: CChannel
+                       , channelSession :: Session
+                       }
+
+channelFromPointer :: Session -> Ptr () -> IO Channel
+channelFromPointer session ptr = return $ Channel (castPtr ptr) session
 
 deriving instance Eq Channel
 deriving instance Data Channel
 deriving instance Typeable Channel
 
 instance Show Channel where
-  show (Channel p) = "<libssh2 channel: " ++ show p ++ ">"
+  show channel = "<libssh2 channel: " ++ show (channelPtr channel) ++ ">"
 
 instance ToPointer Channel where
-  toPointer (Channel p) = castPtr p
+  toPointer = castPtr . channelPtr 
 
