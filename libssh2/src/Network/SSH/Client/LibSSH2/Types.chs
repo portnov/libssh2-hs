@@ -25,7 +25,6 @@ module Network.SSH.Client.LibSSH2.Types
   ) where
 
 import Foreign
-import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.C.String
 import Data.Generics
@@ -120,6 +119,7 @@ instance ToPointer Channel where
 data Direction = INBOUND | OUTBOUND
   deriving (Eq, Show)
 
+int2dir :: (Eq a, Num a, Show a) => a -> [Direction]
 int2dir 1 = [INBOUND]
 int2dir 2 = [OUTBOUND]
 int2dir 3 = [INBOUND, OUTBOUND]

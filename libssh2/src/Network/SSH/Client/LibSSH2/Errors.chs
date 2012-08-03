@@ -17,7 +17,7 @@ module Network.SSH.Client.LibSSH2.Errors
    handleInt,
    handleBool,
    handleNullPtr,
-   int2error,
+   int2error, error2int,
    blockedDirections,
    threadWaitSession
   ) where
@@ -25,7 +25,6 @@ module Network.SSH.Client.LibSSH2.Errors
 import Control.Exception
 import Data.Generics
 import Foreign
-import Foreign.Ptr
 import Foreign.C.Types
 import Control.Monad (when)
 
