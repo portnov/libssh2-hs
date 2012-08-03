@@ -7,7 +7,7 @@
 
 module Network.SSH.Client.LibSSH2.Foreign
   (-- * Types
-   KnownHosts, KnownHostResult (..), KnownHostType (..),
+   KnownHosts, KnownHostResult (..), KnownHostType (..), KnownHost (..),
 
    -- * Session functions
    initialize, exit,
@@ -24,7 +24,7 @@ module Network.SSH.Client.LibSSH2.Foreign
 
    -- * Channel functions
    openChannelSession, closeChannel, freeChannel,
-   channelSendEOF, channelWaitEOF,
+   channelSendEOF, channelWaitEOF, channelIsEOF,
    readChannel, writeChannel,
    writeChannelFromHandle, readChannelToHandle,
    channelProcess, channelExecute, channelShell,
@@ -36,20 +36,14 @@ module Network.SSH.Client.LibSSH2.Foreign
    TraceFlag (..), setTraceMode
   ) where
 
-import Control.Exception
-import Control.Monad (when)
 import Foreign
-import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.C.String
 import System.IO
-import Network.Socket
-import Data.Bits
-import Data.Int
+import Network.Socket (Socket(MkSocket))
 import Data.Time.Clock.POSIX
 import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Unsafe as BSS
-import Text.Printf
 
 import Network.SSH.Client.LibSSH2.Types
 import Network.SSH.Client.LibSSH2.Errors
@@ -201,7 +195,7 @@ checkKnownHost :: KnownHosts         --
                -> String             -- ^ Host public key
                -> [KnownHostType]    -- ^ Host flags (see libssh2 documentation)
                -> IO KnownHostResult
-checkKnownHost kh host port key mask = checkKnownHost_ kh host port key (length key) mask nullPtr
+checkKnownHost kh host port key flags = checkKnownHost_ kh host port key (length key) flags nullPtr
 
 -- TODO: I don't see the '&' in the libssh2 docs?
 {# fun userauth_publickey_fromfile_ex as publicKeyAuthFile_
@@ -271,11 +265,6 @@ readChannel :: Channel         --
             -> IO BSS.ByteString 
 readChannel c sz = readChannelEx c 0 sz
 
-{# fun channel_write_ex as writeChannelEx
-  { toPointer `Channel',
-    `Int',
-    withCStringLenIntConv* `String' & } -> `Int' #}
-
 -- | Write data to channel.
 writeChannel :: Channel -> BSS.ByteString -> IO () 
 writeChannel ch bs = 
@@ -332,9 +321,9 @@ trace2int flags = foldr (.|.) 0 (map tf2int flags)
 -- | Write all data to channel from handle.
 -- Returns amount of transferred data.
 --writeChannelFromHandle :: Channel -> Handle -> IO Integer
-writeChannelFromHandle session ch handle = 
+writeChannelFromHandle session ch h = 
   let
-    go h done fileSize buffer = do
+    go done fileSize buffer = do
       sz <- hGetBuf h buffer bufferSize
       sent <- send 0 (fromIntegral sz) buffer
       let newDone = done + sent
@@ -343,7 +332,7 @@ writeChannelFromHandle session ch handle =
              --channelSendEOF ch
              return $ fromIntegral sz
         else do
-             rest <- go h newDone  fileSize buffer
+             rest <- go newDone  fileSize buffer
              return $ fromIntegral sz + rest
     
     send written 0 _ = return written
@@ -359,24 +348,24 @@ writeChannelFromHandle session ch handle =
     bufferSize = 0x100000
 
   in do
-    fileSize <- hFileSize handle
-    {# call trace #} (toPointer session) (512)
+    fileSize <- hFileSize h
+    _ <- {# call trace #} (toPointer session) (512)
     allocaBytes bufferSize $ \buffer ->
-        go handle 0 fileSize buffer
+        go 0 fileSize buffer
 
 -- | Read all data from channel to handle.
 -- Returns amount of transferred data.
 readChannelToHandle :: Channel -> Handle -> Offset -> IO Integer
-readChannelToHandle ch handle fileSize = do
+readChannelToHandle ch h fileSize = do
     allocaBytes bufferSize $ \buffer ->
         readChannelCB ch buffer bufferSize fileSize callback
   where
-    callback buffer size = hPutBuf handle buffer size
+    callback buffer size = hPutBuf h buffer size
 
     bufferSize :: Int
     bufferSize = 0x100000
 
-readChannelCB :: Channel -> CString -> Int -> Offset -> (CString -> Int -> IO a) -> IO Integer
+readChannelCB :: Channel -> CString -> Int -> Offset -> (CString -> Int -> IO ()) -> IO Integer
 readChannelCB ch buffer bufferSize fileSize callback =
   let go got = do
         let toRead = min (fromIntegral fileSize - got) (fromIntegral bufferSize)
@@ -397,7 +386,7 @@ readChannelCB ch buffer bufferSize fileSize callback =
           else do
                rest <- go newGot
                return $ isz + rest
-  in go 0
+  in go (0 :: Integer)
 
 {# fun channel_eof as channelIsEOF
   { toPointer `Channel' } -> `Bool' handleBool* #}
@@ -449,7 +438,7 @@ scpSendChannel session remotePath mode size mtime atime = handleNullPtr (Just se
 
 type Offset = {# type off_t #}
 
-{# pointer *stat_t as Stat newtype #}
+-- {# pointer *stat_t as Stat newtype #}
 
 -- | Create SCP file receive channel.
 -- TODO: receive struct stat also.

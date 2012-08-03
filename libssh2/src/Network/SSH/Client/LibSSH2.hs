@@ -30,7 +30,6 @@ import qualified Data.ByteString.Char8 as BSSC
 import qualified Data.ByteString.Lazy as BSL
 
 import Network.SSH.Client.LibSSH2.Types
-import Network.SSH.Client.LibSSH2.Errors
 import Network.SSH.Client.LibSSH2.Foreign
 
 -- | Similar to Network.connectTo, but does not socketToHandle.
