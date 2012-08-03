@@ -16,7 +16,9 @@ module Network.SSH.Client.LibSSH2.Types
    peekMaybeCStringPtr,
    channelFromPointer,
    knownHostsFromPointer,
-   sessionFromPointer
+   sessionFromPointer,
+   sessionGetSocket,
+   sessionSetSocket
   ) where
 
 import Foreign
@@ -24,6 +26,8 @@ import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.C.String
 import Data.Generics
+import Data.IORef
+import Network.Socket
 
 type Size = {# type size_t #}
 
@@ -48,25 +52,37 @@ peekMaybeCStringPtr ptr = do
 class ToPointer p where
   toPointer :: p -> Ptr ()
 
-{# pointer *SESSION as Session newtype #}
+{# pointer *SESSION as CSession #}
 
-sessionFromPointer :: Ptr () -> Session
-sessionFromPointer ptr = Session (castPtr ptr)
+data Session = Session { sessionPtr       :: CSession
+                       , sessionSocketRef :: IORef (Maybe Socket)
+                       }
+
+sessionFromPointer :: Ptr () -> IO Session
+sessionFromPointer ptr = do
+  socketRef <- newIORef Nothing
+  return $ Session (castPtr ptr) socketRef
+
+sessionGetSocket :: Session -> IO (Maybe Socket)
+sessionGetSocket = readIORef . sessionSocketRef
+
+sessionSetSocket :: Session -> Maybe Socket -> IO ()
+sessionSetSocket session = writeIORef (sessionSocketRef session)
 
 deriving instance Eq Session
 deriving instance Data Session
 deriving instance Typeable Session
 
 instance Show Session where
-  show (Session p) = "<libssh2 session: " ++ show p ++ ">"
+  show session = "<libssh2 session: " ++ show (sessionPtr session) ++ ">"
 
 instance ToPointer Session where
-  toPointer (Session p) = castPtr p
+  toPointer = castPtr . sessionPtr 
 
 {# pointer *KNOWNHOSTS as KnownHosts newtype #}
 
-knownHostsFromPointer :: Ptr () -> KnownHosts
-knownHostsFromPointer ptr = KnownHosts (castPtr ptr)
+knownHostsFromPointer :: Ptr () -> IO KnownHosts
+knownHostsFromPointer ptr = return $ KnownHosts (castPtr ptr)
 
 deriving instance Eq KnownHosts
 deriving instance Data KnownHosts
@@ -80,8 +96,8 @@ instance ToPointer KnownHosts where
 
 {# pointer *CHANNEL as Channel newtype #}
 
-channelFromPointer :: Ptr () -> Channel
-channelFromPointer ptr = Channel (castPtr ptr)
+channelFromPointer :: Ptr () -> IO Channel
+channelFromPointer ptr = return $ Channel (castPtr ptr)
 
 deriving instance Eq Channel
 deriving instance Data Channel

@@ -166,7 +166,9 @@ bool2int False = 0
 
 -- | Run SSH handshake on network socket.
 handshake :: Session -> Socket -> IO ()
-handshake session socket = void . handleInt $ handshake_ session socket
+handshake session socket = do
+  void . handleInt $ handshake_ session socket
+  sessionSetSocket session (Just socket)
 
 {# fun knownhost_init as initKnownHosts_
   { toPointer `Session' } -> `Ptr ()' id #}
