@@ -140,7 +140,7 @@ scpSendFile s mode local remote = do
   h <- openFile local ReadMode
   size <- hFileSize h
   (_, result) <- withChannelBy (scpSendChannel s remote mode (fromIntegral size) 0 0) id $ \ch -> do
-    written <- writeChannelFromHandle s ch h
+    written <- writeChannelFromHandle ch h
     channelSendEOF ch
     channelWaitEOF ch
     return written

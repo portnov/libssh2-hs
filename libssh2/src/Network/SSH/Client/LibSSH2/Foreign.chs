@@ -320,8 +320,8 @@ trace2int flags = foldr (.|.) 0 (map tf2int flags)
 
 -- | Write all data to channel from handle.
 -- Returns amount of transferred data.
---writeChannelFromHandle :: Channel -> Handle -> IO Integer
-writeChannelFromHandle session ch h = 
+writeChannelFromHandle :: Channel -> Handle -> IO Integer
+writeChannelFromHandle ch h = 
   let
     go done fileSize buffer = do
       sz <- hGetBuf h buffer bufferSize
@@ -337,7 +337,7 @@ writeChannelFromHandle session ch h =
     
     send written 0 _ = return written
     send written size buffer = do
-      sent <- handleInt (Just session) $ 
+      sent <- handleInt (Just $ channelSession ch) $ 
                 {# call channel_write_ex #}
                   (toPointer ch)
                   0
@@ -349,7 +349,7 @@ writeChannelFromHandle session ch h =
 
   in do
     fileSize <- hFileSize h
-    _ <- {# call trace #} (toPointer session) (512)
+    _ <- {# call trace #} (toPointer $ channelSession ch) (512)
     allocaBytes bufferSize $ \buffer ->
         go 0 fileSize buffer
 
