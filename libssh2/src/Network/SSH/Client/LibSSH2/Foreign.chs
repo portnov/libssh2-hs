@@ -323,19 +323,17 @@ trace2int flags = foldr (.|.) 0 (map tf2int flags)
 writeChannelFromHandle :: Channel -> Handle -> IO Integer
 writeChannelFromHandle ch h = 
   let
-    go done fileSize buffer = do
+    go :: Integer -> Ptr a -> IO Integer
+    go done buffer = do
       sz <- hGetBuf h buffer bufferSize
-      sent <- send 0 (fromIntegral sz) buffer
-      let newDone = done + sent
+      send 0 (fromIntegral sz) buffer
+      let newDone = done + fromIntegral sz 
       if sz < bufferSize
-        then do
-             --channelSendEOF ch
-             return $ fromIntegral sz
-        else do
-             rest <- go newDone  fileSize buffer
-             return $ fromIntegral sz + rest
-    
-    send written 0 _ = return written
+        then return newDone 
+        else go newDone buffer
+ 
+    send :: Int -> CLong -> Ptr a -> IO () 
+    send _ 0 _ = return () 
     send written size buffer = do
       sent <- handleInt (Just $ channelSession ch) $ 
                 {# call channel_write_ex #}
@@ -348,10 +346,8 @@ writeChannelFromHandle ch h =
     bufferSize = 0x100000
 
   in do
-    fileSize <- hFileSize h
     _ <- {# call trace #} (toPointer $ channelSession ch) (512)
-    allocaBytes bufferSize $ \buffer ->
-        go 0 fileSize buffer
+    allocaBytes bufferSize $ go 0 
 
 -- | Read all data from channel to handle.
 -- Returns amount of transferred data.
