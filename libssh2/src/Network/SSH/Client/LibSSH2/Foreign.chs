@@ -232,12 +232,12 @@ openChannelSession :: Session -> IO Channel
 openChannelSession s = handleNullPtr (Just s) (channelFromPointer s) $ 
   openSessionChannelEx s "session" 65536 32768 ""
 
-channelProcess :: Channel -> String -> String -> IO Int
-channelProcess ch kind command = handleInt (Just $ channelSession ch) $
+channelProcess :: Channel -> String -> String -> IO () 
+channelProcess ch kind command = void . handleInt (Just $ channelSession ch) $
   channelProcessStartup_ ch kind command
 
 -- | Execute command
-channelExecute :: Channel -> String -> IO Int
+channelExecute :: Channel -> String -> IO () 
 channelExecute c command = channelProcess c "exec" command
 
 {# fun channel_process_startup as channelProcessStartup_ 
@@ -246,8 +246,8 @@ channelExecute c command = channelProcess c "exec" command
     `String' & } -> `Int' #}
 
 -- | Execute shell command
-channelShell :: Channel -> IO Int
-channelShell c = handleInt (Just $ channelSession c) $ channelProcessStartup_ c "shell" ""  
+channelShell :: Channel -> IO () 
+channelShell c = void . handleInt (Just $ channelSession c) $ channelProcessStartup_ c "shell" ""  
 
 {# fun channel_request_pty_ex as requestPTYEx
   { toPointer `Channel',
@@ -256,8 +256,8 @@ channelShell c = handleInt (Just $ channelSession c) $ channelProcessStartup_ c 
     `Int', `Int',
     `Int', `Int' } -> `Int' #}
 
-requestPTY :: Channel -> String -> IO Int
-requestPTY ch term = handleInt (Just $ channelSession ch) $ requestPTYEx ch term "" 0 0 0 0
+requestPTY :: Channel -> String -> IO () 
+requestPTY ch term = void . handleInt (Just $ channelSession ch) $ requestPTYEx ch term "" 0 0 0 0
 
 readChannelEx :: Channel -> Int -> Size -> IO BSS.ByteString 
 readChannelEx ch i size =

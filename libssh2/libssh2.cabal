@@ -47,6 +47,7 @@ Library
                        bytestring >= 0.9
 
   Extra-libraries:     "ssh2"
+  GHC-Options:         -Wall
   
   -- Other-modules:       
   
