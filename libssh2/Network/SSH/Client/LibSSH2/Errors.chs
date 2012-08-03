@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface, DeriveDataTypeable, FlexibleInstances, TypeFamilies, MultiParamTypeClasses #-}
+{-# LANGUAGE ForeignFunctionInterface, DeriveDataTypeable, FlexibleInstances #-}
 
 #include <libssh2.h>
 
@@ -10,7 +10,7 @@ module Network.SSH.Client.LibSSH2.Errors
    NULL_POINTER,
 
    -- * Utilities
-   CIntResult (..),
+   IntResult (..),
 
    -- * Functions
    getLastError,
@@ -93,41 +93,20 @@ data NULL_POINTER = NULL_POINTER
 
 instance Exception NULL_POINTER
 
-class HasCInt a where
-  intResult :: a -> CInt
+class IntResult a where
+  intResult :: a -> Int
 
-class (HasCInt a) => CIntResult a b where
-  fromCInt :: a -> b
-
-instance HasCInt CInt where
+instance IntResult Int where
   intResult = id
 
-instance (Num b) => CIntResult CInt b where
-  fromCInt = fromIntegral
+instance IntResult (Int, a) where
+  intResult = fst
 
-instance HasCInt CLong where
-  intResult = fromIntegral
+instance IntResult (Int, a, b) where
+  intResult = \(i, _, _) -> i
 
-instance (Num b) => CIntResult CLong b where
-  fromCInt = fromIntegral
-
-instance (Integral i) => HasCInt (i, a) where
-  intResult (i, _) = fromIntegral i
-  
-instance (Integral i, Num b) => CIntResult (i, a) (b, a) where
-  fromCInt (i, a) = (fromIntegral i, a)
-
-instance HasCInt (CInt, a, b) where
-  intResult (i, _, _) = i
-
-instance (Num j) => CIntResult (CInt, a, b) (j, a, b) where
-  fromCInt (i, a, b) = (fromIntegral i, a, b)
-
-instance HasCInt (CInt, a, b, c) where
-  intResult (i, _, _, _) = i
-
-instance (Num j) => CIntResult (CInt, a, b, c) (j, a, b, c) where
-  fromCInt (i, a, b, c) = (fromIntegral i, a, b, c)
+instance IntResult (Int, a, b, c) where
+  intResult = \(i, _, _, _) -> i
 
 {# fun session_last_error as getLastError_
   { toPointer `Session',
@@ -141,12 +120,13 @@ getLastError s = getLastError_ s nullPtr 0
 
 -- | Throw an exception if negative value passed,
 -- or return unchanged value.
-handleInt :: (CIntResult a b) => a -> IO b
-handleInt x =
+handleInt :: (IntResult a) => IO a -> IO a
+handleInt io = do
+  x <- io
   let r = intResult x
-  in if r < 0
-       then throw (int2error r)
-       else return (fromCInt x)
+  if r < 0
+    then throw (int2error r)
+    else return x 
 
 handleBool :: CInt -> IO Bool
 handleBool x
@@ -156,8 +136,8 @@ handleBool x
 
 -- | Throw an exception if null pointer passed,
 -- or return it casted to right type.
-handleNullPtr :: (IsPointer a) => Ptr () -> IO a
-handleNullPtr p
-  | p == nullPtr = throw NULL_POINTER
-  | otherwise    = return (fromPointer p)
-
+handleNullPtr :: (IsPointer a) => IO (Ptr ()) -> IO a
+handleNullPtr io = do
+  p <- io
+  if p == nullPtr then throw NULL_POINTER
+                  else return (fromPointer p)

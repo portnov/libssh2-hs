@@ -39,7 +39,7 @@ module Network.SSH.Client.LibSSH2.Foreign
   ) where
 
 import Control.Exception
-import Control.Monad
+import Control.Monad (when)
 import Foreign
 import Foreign.Ptr
 import Foreign.C.Types
@@ -122,32 +122,37 @@ init_crypto True  = 0
 ssh2socket :: Socket -> CInt
 ssh2socket (MkSocket s _ _ _ _) = s
 
+{# fun init as initialize_
+  { init_crypto `Bool' } -> `Int' #}
+
 -- | Initialize libssh2. Pass True to enable encryption
 -- or False to disable it.
-{# fun init as initialize
-  { init_crypto `Bool' } -> `Int' handleInt* #}
+initialize :: Bool -> IO ()
+initialize flags = void . handleInt $ initialize_ flags
 
 -- | Deinitialize libssh2.
 {# fun exit as exit { } -> `()' #}
 
 -- | Create Session object
 initSession :: IO Session
-initSession = do
-  ptr <- {# call session_init_ex #} nullFunPtr nullFunPtr nullFunPtr nullPtr
-  handleNullPtr ptr
+initSession = handleNullPtr $ 
+  {# call session_init_ex #} nullFunPtr nullFunPtr nullFunPtr nullPtr
+
+{# fun session_free as freeSession_
+  { toPointer `Session' } -> `Int' #}
 
 -- | Free Session object's memory
-{# fun session_free as freeSession
-  { toPointer `Session' } -> `Int' handleInt* #}
+freeSession :: Session -> IO ()
+freeSession session = void . handleInt $ freeSession_ session
 
 {# fun session_disconnect_ex as disconnectSessionEx
-  { toPointer `Session', `Int', `String', `String' } -> `Int' handleInt* #}
+  { toPointer `Session', `Int', `String', `String' } -> `Int' #}
 
 -- | Disconnect session (but do not free memory)
 disconnectSession :: Session
                   -> String  -- ^ Goodbye message
                   -> IO Int
-disconnectSession s msg = disconnectSessionEx s 11 msg ""
+disconnectSession s msg = handleInt $ disconnectSessionEx s 11 msg ""
 
 {# fun session_set_blocking as setBlocking
   { toPointer `Session', bool2int `Bool' } -> `()' #}
@@ -156,26 +161,32 @@ bool2int :: Bool -> CInt
 bool2int True  = 1
 bool2int False = 0
 
+{# fun session_handshake as handshake_
+  { toPointer `Session', ssh2socket `Socket' } -> `Int' #}
+
 -- | Run SSH handshake on network socket.
-{# fun session_handshake as handshake
-  { toPointer `Session', ssh2socket `Socket' } -> `Int' handleInt* #}
+handshake :: Session -> Socket -> IO ()
+handshake session socket = void . handleInt $ handshake_ session socket
+
+{# fun knownhost_init as initKnownHosts_
+  { toPointer `Session' } -> `Ptr ()' id #}
 
 -- | Create KnownHosts object for given session.
-{# fun knownhost_init as initKnownHosts
-  { toPointer `Session' } -> `KnownHosts' handleNullPtr* #}
+initKnownHosts :: Session -> IO KnownHosts
+initKnownHosts session = handleNullPtr $ initKnownHosts_ session
 
 -- | Free KnownHosts object's memory
 {# fun knownhost_free as freeKnownHosts
   { toPointer `KnownHosts' } -> `()' #}
 
 {# fun knownhost_readfile as knownHostsReadFile_
-  { toPointer `KnownHosts', `String', id `CInt' } -> `Int' handleInt* #}
+  { toPointer `KnownHosts', `String', id `CInt' } -> `Int' #}
 
 -- | Read known hosts from file
 knownHostsReadFile :: KnownHosts
                    -> FilePath   -- ^ Path to known_hosts file
                    -> IO Int
-knownHostsReadFile kh path = knownHostsReadFile_ kh path 1
+knownHostsReadFile kh path = handleInt $ knownHostsReadFile_ kh path 1
 
 -- | Get remote host public key
 {# fun session_hostkey as getHostKey
@@ -199,58 +210,60 @@ checkKnownHost :: KnownHosts         --
                -> IO KnownHostResult
 checkKnownHost kh host port key mask = checkKnownHost_ kh host port key (length key) mask nullPtr
 
--- | Perform public key authentication.
--- Arguments are: session, username, path to public key file,
--- path to private key file, passphrase.
-{# fun userauth_publickey_fromfile_ex as publicKeyAuthFile
+-- TODO: I don't see the '&' in the libssh2 docs?
+{# fun userauth_publickey_fromfile_ex as publicKeyAuthFile_
   { toPointer `Session',
     `String' &,
     `String',
     `String',
-    `String' } -> `Int' handleInt* #}
+    `String' } -> `Int' #}
+
+-- | Perform public key authentication.
+publicKeyAuthFile :: Session -- ^ Session
+                  -> String  -- ^ Username
+                  -> String  -- ^ Path to public key
+                  -> String  -- ^ Path to private key
+                  -> String  -- ^ Passphrase
+                  -> IO ()
+publicKeyAuthFile session username public private passphrase = void . handleInt $ 
+  publicKeyAuthFile_ session username public private passphrase
 
 {# fun channel_open_ex as openSessionChannelEx
   { toPointer `Session',
    `String' &,
    `Int', `Int',
-   `String' & } -> `Channel' handleNullPtr* #}
+   `String' & } -> `Ptr ()' id #}
 
 -- | Open a channel for session.
 openChannelSession :: Session -> IO Channel
-openChannelSession s = openSessionChannelEx s "session" 65536 32768 ""
+openChannelSession s = handleNullPtr $ openSessionChannelEx s "session" 65536 32768 ""
 
 channelProcess :: Channel -> String -> String -> IO Int
-channelProcess ch kind command = do
-  withCStringLenIntConv kind $ \(kindptr, kindlen) ->
-    withCStringLenIntConv command $ \(commandptr, commandlen) ->
-      {# call channel_process_startup #}
-          (toPointer ch)
-          kindptr kindlen
-          commandptr commandlen >>= handleInt
+channelProcess ch kind command = handleInt $
+  channelProcessStartup_ ch kind command
 
 -- | Execute command
 channelExecute :: Channel -> String -> IO Int
 channelExecute c command = channelProcess c "exec" command
 
+{# fun channel_process_startup as channelProcessStartup_ 
+  { toPointer `Channel',
+    `String' &,
+    `String' & } -> `Int' #}
+
 -- | Execute shell command
 channelShell :: Channel -> IO Int
-channelShell c = do
-  withCStringLenIntConv "shell" $ \(kindptr, kindlen) ->
-    {# call channel_process_startup #}
-      (toPointer c)
-      kindptr
-      kindlen
-      nullPtr 0 >>= handleInt
+channelShell c = handleInt $ channelProcessStartup_ c "shell" ""  
 
 {# fun channel_request_pty_ex as requestPTYEx
   { toPointer `Channel',
     `String' &,
     `String' &,
     `Int', `Int',
-    `Int', `Int' } -> `Int' handleInt* #}
+    `Int', `Int' } -> `Int' #}
 
 requestPTY :: Channel -> String -> IO Int
-requestPTY ch term = requestPTYEx ch term "" 0 0 0 0
+requestPTY ch term = handleInt $ requestPTYEx ch term "" 0 0 0 0
 
 readChannelEx :: Channel -> Int -> Size -> IO (SSize, String)
 readChannelEx ch i size =
@@ -272,15 +285,18 @@ readChannel c sz = readChannelEx c 0 sz
 {# fun channel_write_ex as writeChannelEx
   { toPointer `Channel',
     `Int',
-    withCStringLenIntConv* `String' & } -> `Int' handleInt* #}
+    withCStringLenIntConv* `String' & } -> `Int' #}
 
 -- | Write data to channel.
 -- Returns amount of written data.
 writeChannel :: Channel -> String -> IO Int
-writeChannel ch str = writeChannelEx ch 0 str
+writeChannel ch str = handleInt $ writeChannelEx ch 0 str
 
-{# fun channel_send_eof as channelSendEOF
-  { toPointer `Channel' } -> `Int' handleInt* #}
+{# fun channel_send_eof as channelSendEOF_
+  { toPointer `Channel' } -> `Int' #}
+
+channelSendEOF :: Channel -> IO ()
+channelSendEOF channel = void . handleInt $ channelSendEOF_ channel
 
 data TraceFlag =
     T_TRANS
@@ -309,7 +325,7 @@ trace2int :: [TraceFlag] -> CInt
 trace2int flags = foldr (.|.) 0 (map tf2int flags)
 
 {# fun trace as setTraceMode
-  { toPointer `Session', trace2int `[TraceFlag]' } -> `Int' handleInt* #}
+  { toPointer `Session', trace2int `[TraceFlag]' } -> `()' #}
 
 -- | Write all data to channel from handle.
 -- Returns amount of transferred data.
@@ -386,13 +402,19 @@ readChannelCB ch buffer bufferSize fileSize callback =
 {# fun channel_eof as channelIsEOF
   { toPointer `Channel' } -> `Bool' handleBool* #}
 
+{# fun channel_close as closeChannel_
+  { toPointer `Channel' } -> `Int' #}
+
 -- | Close channel (but do not free memory)
-{# fun channel_close as closeChannel
-  { toPointer `Channel' } -> `Int' handleInt* #}
+closeChannel :: Channel -> IO ()
+closeChannel channel = void . handleInt $ closeChannel_ channel
+
+{# fun channel_free as freeChannel_
+  { toPointer `Channel' } -> `Int' #}
 
 -- | Free channel object's memory
-{# fun channel_free as freeChannel
-  { toPointer `Channel' } -> `Int' handleInt* #}
+freeChannel :: Channel -> IO ()
+freeChannel channel = void . handleInt $ freeChannel_ channel
 
 -- | Get currently blocked directions
 {# fun session_block_directions as blockedDirections
@@ -400,7 +422,7 @@ readChannelCB ch buffer bufferSize fileSize callback =
 
 -- | Get channel exit status
 {# fun channel_get_exit_status as channelExitStatus
-  { toPointer `Channel' } -> `Int' handleInt* #}
+  { toPointer `Channel' } -> `Int' #}
 
 {# fun channel_get_exit_signal as channelExitSignal_
   { toPointer `Channel',
@@ -409,21 +431,25 @@ readChannelCB ch buffer bufferSize fileSize callback =
     alloca- `Maybe String' peekMaybeCStringPtr*,
     castPtr `Ptr Int',
     alloca- `Maybe String' peekMaybeCStringPtr*,
-    castPtr `Ptr Int' } -> `Int' handleInt* #}
+    castPtr `Ptr Int' } -> `Int' #}
 
 -- | Get channel exit signal. Returns:
 -- (possibly error code, exit signal name, possibly error message, possibly language code).
 channelExitSignal :: Channel -> IO (Int, String, Maybe String, Maybe String)
-channelExitSignal ch = channelExitSignal_ ch nullPtr nullPtr nullPtr
+channelExitSignal ch = handleInt $ channelExitSignal_ ch nullPtr nullPtr nullPtr
 
--- | Create SCP file send channel.
-{# fun scp_send64 as scpSendChannel
+{# fun scp_send64 as scpSendChannel_
   { toPointer `Session',
     `String',
     `Int',
     `Int64',
     round `POSIXTime',
-    round `POSIXTime' } -> `Channel' handleNullPtr* #}
+    round `POSIXTime' } -> `Ptr ()' id #}
+
+-- | Create SCP file send channel.
+scpSendChannel :: Session -> String -> Int -> Int64 -> POSIXTime -> POSIXTime -> IO Channel
+scpSendChannel session remotePath mode size mtime atime = handleNullPtr $ 
+  scpSendChannel_ session remotePath mode size mtime atime
 
 type Offset = {# type off_t #}
 
@@ -433,12 +459,8 @@ type Offset = {# type off_t #}
 -- TODO: receive struct stat also.
 scpReceiveChannel :: Session -> FilePath -> IO (Channel, Offset)
 scpReceiveChannel s path = do
-  (ptr, sz) <- withCString path $ \pathptr ->
-                  allocaBytes {# sizeof stat_t #} $ \statptr -> do
-                    p <- {# call scp_recv #} (toPointer s) pathptr statptr
-                    size <- {# get stat_t->st_size #} statptr
-                    return (p, size)
-  channel <- handleNullPtr ptr
-  return (channel, sz)
-
-
+  withCString path $ \pathptr ->
+     allocaBytes {# sizeof stat_t #} $ \statptr -> do
+       channel <- handleNullPtr $ {# call scp_recv #} (toPointer s) pathptr statptr
+       size <- {# get stat_t->st_size #} statptr
+       return (channel, size)
