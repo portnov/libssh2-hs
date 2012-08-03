@@ -9,6 +9,8 @@ module Network.SSH.Client.LibSSH2.Types
    KnownHosts,
    Channel,
    ToPointer (..),
+   Direction (..),
+   int2dir,
    CStringCLen,
    Size, SSize,
    withCStringLenIntConv,
@@ -114,3 +116,11 @@ instance Show Channel where
 instance ToPointer Channel where
   toPointer = castPtr . channelPtr 
 
+-- | Session directions
+data Direction = INBOUND | OUTBOUND
+  deriving (Eq, Show)
+
+int2dir 1 = [INBOUND]
+int2dir 2 = [OUTBOUND]
+int2dir 3 = [INBOUND, OUTBOUND]
+int2dir x = error $ "Unknown direction: " ++ show x

@@ -17,7 +17,9 @@ module Network.SSH.Client.LibSSH2.Errors
    handleInt,
    handleBool,
    handleNullPtr,
-   int2error
+   int2error,
+   blockedDirections,
+   threadWaitSession
   ) where
 
 import Control.Exception
@@ -25,8 +27,10 @@ import Data.Generics
 import Foreign
 import Foreign.Ptr
 import Foreign.C.Types
+import Control.Monad (when)
 
 import Network.SSH.Client.LibSSH2.Types
+import Network.SSH.Client.LibSSH2.WaitSocket
 
 -- | Error codes returned by libssh2.
 data ErrorCode =
@@ -120,12 +124,14 @@ getLastError s = getLastError_ s nullPtr 0
 
 -- | Throw an exception if negative value passed,
 -- or return unchanged value.
-handleInt :: (IntResult a) => IO a -> IO a
-handleInt io = do
+handleInt :: (IntResult a) => Maybe Session -> IO a -> IO a
+handleInt s io = do
   x <- io
   let r = intResult x
   if r < 0
-    then throw (int2error r)
+    then case int2error r of
+           EAGAIN -> threadWaitSession s >> handleInt s io
+           err    -> throwIO err
     else return x 
 
 handleBool :: CInt -> IO Bool
@@ -136,8 +142,30 @@ handleBool x
 
 -- | Throw an exception if null pointer passed,
 -- or return it casted to right type.
-handleNullPtr :: (Ptr () -> IO a) -> IO (Ptr ()) -> IO a
-handleNullPtr fromPointer io = do
+handleNullPtr :: Maybe Session -> (Ptr () -> IO a) -> IO (Ptr ()) -> IO a
+handleNullPtr s fromPointer io = do
   p <- io
-  if p == nullPtr then throw NULL_POINTER
-                  else fromPointer p
+  if p == nullPtr 
+    then case s of
+      Nothing -> throw NULL_POINTER
+      Just session -> do
+        (r, _) <- getLastError session
+        case int2error r of
+          EAGAIN -> threadWaitSession (Just session) >> handleNullPtr s fromPointer io
+          _      -> throw NULL_POINTER -- TODO: should we throw the error instead?
+    else fromPointer p
+
+-- | Get currently blocked directions
+{# fun session_block_directions as blockedDirections
+  { toPointer `Session' } -> `[Direction]' int2dir #}
+
+threadWaitSession :: Maybe Session -> IO ()
+threadWaitSession Nothing = error "EAGAIN thrown without session present"
+threadWaitSession (Just s) = do
+  mSocket <- sessionGetSocket s
+  case mSocket of
+    Nothing -> error "EAGAIN thrown on session without socket"
+    Just socket -> do 
+      dirs <- blockedDirections s
+      when (INBOUND `elem` dirs)  $ threadWaitRead socket
+      when (OUTBOUND `elem` dirs) $ threadWaitWrite socket
