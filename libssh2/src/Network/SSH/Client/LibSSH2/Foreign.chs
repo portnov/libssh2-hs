@@ -24,7 +24,7 @@ module Network.SSH.Client.LibSSH2.Foreign
 
    -- * Channel functions
    openChannelSession, closeChannel, freeChannel,
-   channelSendEOF,
+   channelSendEOF, channelWaitEOF,
    readChannel, writeChannel,
    writeChannelFromHandle, readChannelToHandle,
    channelProcess, channelExecute, channelShell,
@@ -293,6 +293,12 @@ writeChannel ch bs =
 
 channelSendEOF :: Channel -> IO ()
 channelSendEOF channel = void . handleInt (Just $ channelSession channel) $ channelSendEOF_ channel
+
+{# fun channel_wait_eof as channelWaitEOF_
+  { toPointer `Channel' } -> `Int' #}
+
+channelWaitEOF :: Channel -> IO ()
+channelWaitEOF channel = void . handleInt (Just $ channelSession channel) $ channelWaitEOF_ channel
 
 data TraceFlag =
     T_TRANS
