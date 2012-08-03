@@ -7,6 +7,7 @@ module Network.SSH.Client.LibSSH2
    withSSH2,
    withSession,
    withChannel,
+   withChannelBy,
    checkHost,
    readAllChannel,
    writeAllChannel,
