@@ -82,8 +82,8 @@ checkHost :: Session
           -> IO KnownHostResult
 checkHost s host port path = do
   kh <- initKnownHosts s
-  knownHostsReadFile kh path
-  (hostkey, keylen, keytype) <- getHostKey s
+  _numKnownHosts <- knownHostsReadFile kh path
+  (hostkey, _keylen, _keytype) <- getHostKey s
   result <- checkKnownHost kh host port hostkey [TYPE_PLAIN, KEYENC_RAW]
   freeKnownHosts kh
   return result
@@ -114,7 +114,7 @@ runShellCommands :: Session -> [String] -> IO (Int, [BSL.ByteString])
 runShellCommands s commands = withChannel s $ \ch -> do
   requestPTY ch "linux"
   channelShell ch
-  hello <- readAllChannel ch
+  _hello <- readAllChannel ch
   out <- forM commands $ \cmd -> do
              writeChannel ch (BSSC.pack $ cmd ++ "\n")
              r <- readAllChannel ch
