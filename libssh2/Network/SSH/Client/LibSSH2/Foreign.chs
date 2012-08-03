@@ -260,9 +260,7 @@ requestPTY ch term = handleInt (Just $ channelSession ch) $ requestPTYEx ch term
 readChannelEx :: Channel -> Int -> Size -> IO (SSize, String)
 readChannelEx ch i size =
   allocaBytes (fromIntegral size) $ \buffer -> do
-    rc <- {# call channel_read_ex #} (toPointer ch) (fromIntegral i) buffer size
-    when (rc < 0) $
-        throw (int2error rc)
+    rc <- handleInt (Just $ channelSession ch) $ {# call channel_read_ex #} (toPointer ch) (fromIntegral i) buffer size
     str <- peekCAStringLen (buffer, fromIntegral rc)
     return (rc, str)
 
@@ -338,13 +336,12 @@ writeChannelFromHandle session ch handle =
     
     send written 0 _ = return written
     send written size buffer = do
-      sent <- {# call channel_write_ex #}
+      sent <- handleInt (Just session) $ 
+                {# call channel_write_ex #}
                   (toPointer ch)
                   0
                   (plusPtr buffer written)
                   (fromIntegral size)
-      when (sent < 0) $ do
-          throw (int2error sent)
       send (written + fromIntegral sent) (size - sent) buffer
 
     bufferSize = 0x100000
@@ -371,13 +368,12 @@ readChannelCB :: Channel -> CString -> Int -> Offset -> (CString -> Int -> IO a)
 readChannelCB ch buffer bufferSize fileSize callback =
   let go got = do
         let toRead = min (fromIntegral fileSize - got) (fromIntegral bufferSize)
-        sz <- {# call channel_read_ex #}
+        sz <- handleInt (Just $ channelSession ch) $ 
+                {# call channel_read_ex #}
                   (toPointer ch)
                   0
                   buffer
                   (fromIntegral toRead)
-        when (sz < 0) $
-            throw (int2error sz)
         let isz :: Integer
             isz = fromIntegral sz
         callback buffer (fromIntegral sz)

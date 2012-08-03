@@ -112,6 +112,9 @@ instance IntResult (Int, a, b) where
 instance IntResult (Int, a, b, c) where
   intResult = \(i, _, _, _) -> i
 
+instance IntResult CLong where
+  intResult = fromIntegral
+
 {# fun session_last_error as getLastError_
   { toPointer `Session',
     alloca- `String' peekCStringPtr*,
