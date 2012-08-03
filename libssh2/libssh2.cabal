@@ -43,7 +43,8 @@ Library
   Includes:            include/libssh2_local.h
 
   Build-depends:       base >= 4 && < 5, network >= 2.3,
-                       syb >= 0.3.3, time >= 1.2
+                       syb >= 0.3.3, time >= 1.2,
+                       bytestring >= 0.9
 
   Extra-libraries:     "ssh2"
   
@@ -54,7 +55,7 @@ Library
   
 Executable hs-ssh-client
   if flag(example-client)
-    Build-depends: base, utf8-string, libssh2 >= 0.2, syb, network, filepath
+    Build-depends: base, utf8-string, libssh2 >= 0.2, syb, network, filepath, bytestring
   else
     buildable: False
   Main-Is: ssh-client.hs

@@ -9,6 +9,7 @@ module Network.SSH.Client.LibSSH2
    withChannel,
    checkHost,
    readAllChannel,
+   writeAllChannel,
    scpSendFile,
    scpReceiveFile,
    runShellCommands,
@@ -24,6 +25,9 @@ import Network
 import Network.BSD
 import Network.Socket
 import System.IO
+import qualified Data.ByteString as BSS
+import qualified Data.ByteString.Char8 as BSSC
+import qualified Data.ByteString.Lazy as BSL
 
 import Network.SSH.Client.LibSSH2.Types
 import Network.SSH.Client.LibSSH2.Errors
@@ -88,34 +92,41 @@ checkHost s host port path = do
 withChannel :: Session -> (Channel -> IO a) -> IO (Int, a)
 withChannel s = withChannelBy (openChannelSession s) id 
 
--- | Read all data from the channel
-readAllChannel :: Channel -> IO String
-readAllChannel ch = do
-    (sz, res) <- readChannel ch 0x400
-    if sz > 0
-      then do
-           rest <- readAllChannel ch
-           return $ res ++ rest
-      else return ""
+-- | Read all data from the channel 
+--
+-- Although this function returns a lazy bytestring, the data is /not/ read
+-- lazily.
+readAllChannel :: Channel -> IO BSL.ByteString 
+readAllChannel ch = go []
+  where
+    go :: [BSS.ByteString] -> IO BSL.ByteString
+    go acc = do
+      bs <- readChannel ch 0x400
+      if BSS.length bs > 0
+        then go (bs : acc) 
+        else return (BSL.fromChunks $ reverse acc) 
 
-runShellCommands :: Session -> [String] -> IO (Int, [String])
+-- | Write a lazy bytestring to the channel
+writeAllChannel :: Channel -> BSL.ByteString -> IO ()
+writeAllChannel ch = mapM_ (writeChannel ch) . BSL.toChunks
+
+runShellCommands :: Session -> [String] -> IO (Int, [BSL.ByteString])
 runShellCommands s commands = withChannel s $ \ch -> do
   requestPTY ch "linux"
   channelShell ch
   hello <- readAllChannel ch
   out <- forM commands $ \cmd -> do
-             writeChannel ch (cmd ++ "\n")
+             writeChannel ch (BSSC.pack $ cmd ++ "\n")
              r <- readAllChannel ch
              return r
   channelSendEOF ch
   return out
 
-execCommands :: Session -> [String] -> IO (Int, [String])
+execCommands :: Session -> [String] -> IO (Int, [BSL.ByteString])
 execCommands s commands = withChannel s $ \ch -> 
   forM commands $ \cmd -> do
       channelExecute ch cmd
       readAllChannel ch
-
 
 -- | Send a file to remote host via SCP.
 -- Returns size of sent data.

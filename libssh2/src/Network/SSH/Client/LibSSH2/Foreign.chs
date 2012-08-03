@@ -47,6 +47,8 @@ import Network.Socket
 import Data.Bits
 import Data.Int
 import Data.Time.Clock.POSIX
+import qualified Data.ByteString as BSS
+import qualified Data.ByteString.Unsafe as BSS
 import Text.Printf
 
 import Network.SSH.Client.LibSSH2.Types
@@ -257,19 +259,16 @@ channelShell c = handleInt (Just $ channelSession c) $ channelProcessStartup_ c 
 requestPTY :: Channel -> String -> IO Int
 requestPTY ch term = handleInt (Just $ channelSession ch) $ requestPTYEx ch term "" 0 0 0 0
 
-readChannelEx :: Channel -> Int -> Size -> IO (SSize, String)
+readChannelEx :: Channel -> Int -> Size -> IO BSS.ByteString 
 readChannelEx ch i size =
   allocaBytes (fromIntegral size) $ \buffer -> do
     rc <- handleInt (Just $ channelSession ch) $ {# call channel_read_ex #} (toPointer ch) (fromIntegral i) buffer size
-    str <- peekCAStringLen (buffer, fromIntegral rc)
-    return (rc, str)
+    BSS.packCStringLen (buffer, fromIntegral rc)
 
 -- | Read data from channel.
--- Returns amount of given data and data itself.
--- NOTE: returns bytes sequence, i.e. not Unicode.
 readChannel :: Channel         -- 
             -> Size             -- ^ Amount of data to read
-            -> IO (SSize, String)
+            -> IO BSS.ByteString 
 readChannel c sz = readChannelEx c 0 sz
 
 {# fun channel_write_ex as writeChannelEx
@@ -278,9 +277,16 @@ readChannel c sz = readChannelEx c 0 sz
     withCStringLenIntConv* `String' & } -> `Int' #}
 
 -- | Write data to channel.
--- Returns amount of written data.
-writeChannel :: Channel -> String -> IO Int
-writeChannel ch str = handleInt (Just $ channelSession ch) $ writeChannelEx ch 0 str
+writeChannel :: Channel -> BSS.ByteString -> IO () 
+writeChannel ch bs = 
+    BSS.unsafeUseAsCString bs $ go 0 (fromIntegral $ BSS.length bs)
+  where
+    go :: Int -> CULong -> CString -> IO () 
+    go offset len cstr = do
+      written <- handleInt (Just $ channelSession ch) $ {# call channel_write_ex #} (toPointer ch) 0 (cstr `plusPtr` offset) len
+      if fromIntegral written < len 
+        then go (offset + fromIntegral written) (len - fromIntegral written) cstr
+        else return ()
 
 {# fun channel_send_eof as channelSendEOF_
   { toPointer `Channel' } -> `Int' #}

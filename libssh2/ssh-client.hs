@@ -1,4 +1,4 @@
-
+import qualified Data.ByteString.Lazy as BSL
 import System.Environment
 import System.FilePath
 import Codec.Binary.UTF8.String
@@ -19,10 +19,7 @@ runCommand login host port command =
     withChannel s $ \ch -> do
       channelExecute ch command
       result <- readAllChannel ch
-      let r = decodeString result
-      print (length result)
-      print (length r)
-      putStrLn r
+      BSL.putStr result
 
 sendFile login host port path = 
   ssh login host port $ \s -> do
