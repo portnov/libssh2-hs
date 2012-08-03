@@ -37,5 +37,5 @@ ssh login host port actions = do
   let known_hosts = home </> ".ssh" </> "known_hosts"
       public = home </> ".ssh" </> "id_rsa.pub"
       private = home </> ".ssh" </> "id_rsa"
-  withSSH2 known_hosts public private login host port $ actions
+  withSSH2 known_hosts public private "" login host port $ actions
   exit

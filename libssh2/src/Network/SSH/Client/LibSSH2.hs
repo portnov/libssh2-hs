@@ -47,17 +47,18 @@ socketConnect hostname port = do
 withSSH2 :: FilePath          -- ^ Path to known_hosts file
          -> FilePath          -- ^ Path to public key file
          -> FilePath          -- ^ Path to private key file
+         -> String            -- ^ Passphrase
          -> String            -- ^ Remote user name
          -> String            -- ^ Remote host name
          -> Int               -- ^ Remote port number (usually 22)
          -> (Session -> IO a) -- ^ Actions to perform on session 
          -> IO a 
-withSSH2 known_hosts public private login hostname port fn =
+withSSH2 known_hosts public private passphrase login hostname port fn =
   withSession hostname port $ \s -> do
     r <- checkHost s hostname port known_hosts
     when (r == MISMATCH) $ 
       error $ "Host key mismatch for host " ++ hostname
-    publicKeyAuthFile s login public private ""
+    publicKeyAuthFile s login public private passphrase 
     fn s
 
 -- | Execute some actions within SSH2 session
