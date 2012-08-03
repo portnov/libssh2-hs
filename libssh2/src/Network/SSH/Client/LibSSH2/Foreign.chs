@@ -142,8 +142,8 @@ freeSession session = void . handleInt (Just session) $ freeSession_ session
 -- | Disconnect session (but do not free memory)
 disconnectSession :: Session
                   -> String  -- ^ Goodbye message
-                  -> IO Int
-disconnectSession s msg = handleInt (Just s) $ disconnectSessionEx s 11 msg ""
+                  -> IO () 
+disconnectSession s msg = void . handleInt (Just s) $ disconnectSessionEx s 11 msg ""
 
 {# fun session_set_blocking as setBlocking
   { toPointer `Session', bool2int `Bool' } -> `()' #}
