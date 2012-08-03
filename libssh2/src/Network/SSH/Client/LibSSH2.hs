@@ -86,13 +86,7 @@ checkHost s host port path = do
 
 -- | Execute some actions withing SSH2 channel
 withChannel :: Session -> (Channel -> IO a) -> IO (Int, a)
-withChannel s fn = do
-  ch <- openChannelSession s
-  result <- fn ch
-  closeChannel ch
-  exitStatus <- channelExitStatus ch
-  freeChannel ch
-  return (exitStatus, result)
+withChannel s = withChannelBy (openChannelSession s) id 
 
 -- | Read all data from the channel
 readAllChannel :: Channel -> IO String
@@ -105,8 +99,7 @@ readAllChannel ch = do
       else return ""
 
 runShellCommands :: Session -> [String] -> IO (Int, [String])
-runShellCommands s commands = do
-  ch <- openChannelSession s
+runShellCommands s commands = withChannel s $ \ch -> do
   requestPTY ch "linux"
   channelShell ch
   hello <- readAllChannel ch
@@ -115,21 +108,13 @@ runShellCommands s commands = do
              r <- readAllChannel ch
              return r
   channelSendEOF ch
-  closeChannel ch
-  exitStatus <- channelExitStatus ch
-  freeChannel ch
-  return (exitStatus, out)
+  return out
 
 execCommands :: Session -> [String] -> IO (Int, [String])
-execCommands s commands = do
-  ch <- openChannelSession s
-  out <- forM commands $ \cmd -> do
-             channelExecute ch cmd
-             readAllChannel ch
-  closeChannel ch
-  exitStatus <- channelExitStatus ch
-  freeChannel ch
-  return (exitStatus, out)
+execCommands s commands = withChannel s $ \ch -> 
+  forM commands $ \cmd -> do
+      channelExecute ch cmd
+      readAllChannel ch
 
 
 -- | Send a file to remote host via SCP.
@@ -142,12 +127,10 @@ scpSendFile :: Session
 scpSendFile s mode local remote = do
   h <- openFile local ReadMode
   size <- hFileSize h
-  ch <- scpSendChannel s remote mode (fromIntegral size) 0 0
-  result <- writeChannelFromHandle s ch h
+  (_, result) <- withChannelBy (scpSendChannel s remote mode (fromIntegral size) 0 0) id $ \ch ->
+    writeChannelFromHandle s ch h
   hClose h
-  closeChannel ch
-  freeChannel ch
-  return result
+  return result 
 
 -- | Receive file from remote host via SCP.
 -- Returns size of received data.
@@ -157,9 +140,22 @@ scpReceiveFile :: Session   --
                -> IO Integer
 scpReceiveFile s remote local = do
   h <- openFile local WriteMode
-  (ch, fileSize) <- scpReceiveChannel s remote
-  result <- readChannelToHandle ch h fileSize
+  (_, result) <- withChannelBy (scpReceiveChannel s remote) fst $ \(ch, fileSize) -> do  
+    readChannelToHandle ch h fileSize
   hClose h
-  closeChannel ch
-  freeChannel ch
   return result
+
+-- | Generalization of 'withChannel'
+withChannelBy :: IO a            -- ^ Create a channel (and possibly other stuff)
+              -> (a -> Channel)  -- ^ Extract the channel from "other stuff"
+              -> (a -> IO b)     -- ^ Actions to execute on the channel 
+              -> IO (Int, b)     -- ^ Channel exit status and return value
+withChannelBy createChannel extractChannel actions = do
+  stuff <- createChannel
+  let ch = extractChannel stuff
+  result <- actions stuff 
+  closeChannel ch
+  exitStatus <- channelExitStatus ch
+  freeChannel ch
+  return (exitStatus, result)
+
