@@ -8,12 +8,15 @@ module Network.SSH.Client.LibSSH2.Types
   (Session,
    KnownHosts,
    Channel,
-   IsPointer (..),
+   ToPointer (..),
    CStringCLen,
    Size, SSize,
    withCStringLenIntConv,
    peekCStringPtr,
-   peekMaybeCStringPtr
+   peekMaybeCStringPtr,
+   channelFromPointer,
+   knownHostsFromPointer,
+   sessionFromPointer
   ) where
 
 import Foreign
@@ -42,11 +45,13 @@ peekMaybeCStringPtr ptr = do
     then return Nothing
     else Just `fmap` peekCAString strPtr
 
-class IsPointer p where
-  fromPointer :: Ptr () -> p
+class ToPointer p where
   toPointer :: p -> Ptr ()
 
 {# pointer *SESSION as Session newtype #}
+
+sessionFromPointer :: Ptr () -> Session
+sessionFromPointer ptr = Session (castPtr ptr)
 
 deriving instance Eq Session
 deriving instance Data Session
@@ -55,11 +60,13 @@ deriving instance Typeable Session
 instance Show Session where
   show (Session p) = "<libssh2 session: " ++ show p ++ ">"
 
-instance IsPointer Session where
-  fromPointer p = Session (castPtr p)
+instance ToPointer Session where
   toPointer (Session p) = castPtr p
 
 {# pointer *KNOWNHOSTS as KnownHosts newtype #}
+
+knownHostsFromPointer :: Ptr () -> KnownHosts
+knownHostsFromPointer ptr = KnownHosts (castPtr ptr)
 
 deriving instance Eq KnownHosts
 deriving instance Data KnownHosts
@@ -68,11 +75,13 @@ deriving instance Typeable KnownHosts
 instance Show KnownHosts where
   show (KnownHosts p) = "<libssh2 known hosts: " ++ show p ++ ">"
 
-instance IsPointer KnownHosts where
-  fromPointer p = KnownHosts (castPtr p)
+instance ToPointer KnownHosts where
   toPointer (KnownHosts p) = castPtr p
 
 {# pointer *CHANNEL as Channel newtype #}
+
+channelFromPointer :: Ptr () -> Channel
+channelFromPointer ptr = Channel (castPtr ptr)
 
 deriving instance Eq Channel
 deriving instance Data Channel
@@ -81,7 +90,6 @@ deriving instance Typeable Channel
 instance Show Channel where
   show (Channel p) = "<libssh2 channel: " ++ show p ++ ">"
 
-instance IsPointer Channel where
-  fromPointer p = Channel (castPtr p)
+instance ToPointer Channel where
   toPointer (Channel p) = castPtr p
 

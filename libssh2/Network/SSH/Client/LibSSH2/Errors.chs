@@ -136,8 +136,8 @@ handleBool x
 
 -- | Throw an exception if null pointer passed,
 -- or return it casted to right type.
-handleNullPtr :: (IsPointer a) => IO (Ptr ()) -> IO a
-handleNullPtr io = do
+handleNullPtr :: (Ptr () -> a) -> IO (Ptr ()) -> IO a
+handleNullPtr fromPointer io = do
   p <- io
   if p == nullPtr then throw NULL_POINTER
                   else return (fromPointer p)

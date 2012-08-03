@@ -135,7 +135,7 @@ initialize flags = void . handleInt $ initialize_ flags
 
 -- | Create Session object
 initSession :: IO Session
-initSession = handleNullPtr $ 
+initSession = handleNullPtr sessionFromPointer $ 
   {# call session_init_ex #} nullFunPtr nullFunPtr nullFunPtr nullPtr
 
 {# fun session_free as freeSession_
@@ -173,7 +173,7 @@ handshake session socket = void . handleInt $ handshake_ session socket
 
 -- | Create KnownHosts object for given session.
 initKnownHosts :: Session -> IO KnownHosts
-initKnownHosts session = handleNullPtr $ initKnownHosts_ session
+initKnownHosts session = handleNullPtr knownHostsFromPointer $ initKnownHosts_ session
 
 -- | Free KnownHosts object's memory
 {# fun knownhost_free as freeKnownHosts
@@ -236,7 +236,7 @@ publicKeyAuthFile session username public private passphrase = void . handleInt 
 
 -- | Open a channel for session.
 openChannelSession :: Session -> IO Channel
-openChannelSession s = handleNullPtr $ openSessionChannelEx s "session" 65536 32768 ""
+openChannelSession s = handleNullPtr channelFromPointer $ openSessionChannelEx s "session" 65536 32768 ""
 
 channelProcess :: Channel -> String -> String -> IO Int
 channelProcess ch kind command = handleInt $
@@ -448,7 +448,7 @@ channelExitSignal ch = handleInt $ channelExitSignal_ ch nullPtr nullPtr nullPtr
 
 -- | Create SCP file send channel.
 scpSendChannel :: Session -> String -> Int -> Int64 -> POSIXTime -> POSIXTime -> IO Channel
-scpSendChannel session remotePath mode size mtime atime = handleNullPtr $ 
+scpSendChannel session remotePath mode size mtime atime = handleNullPtr channelFromPointer $ 
   scpSendChannel_ session remotePath mode size mtime atime
 
 type Offset = {# type off_t #}
@@ -461,6 +461,6 @@ scpReceiveChannel :: Session -> FilePath -> IO (Channel, Offset)
 scpReceiveChannel s path = do
   withCString path $ \pathptr ->
      allocaBytes {# sizeof stat_t #} $ \statptr -> do
-       channel <- handleNullPtr $ {# call scp_recv #} (toPointer s) pathptr statptr
+       channel <- handleNullPtr channelFromPointer $ {# call scp_recv #} (toPointer s) pathptr statptr
        size <- {# get stat_t->st_size #} statptr
        return (channel, size)
