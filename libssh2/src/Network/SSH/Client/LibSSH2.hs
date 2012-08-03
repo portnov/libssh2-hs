@@ -56,6 +56,8 @@ withSSH2 :: FilePath          -- ^ Path to known_hosts file
 withSSH2 known_hosts public private login hostname port fn =
   withSession hostname port $ \s -> do
     r <- checkHost s hostname port known_hosts
+    when (r == MISMATCH) $ 
+      error $ "Host key mismatch for host " ++ hostname
     publicKeyAuthFile s login public private ""
     fn s
 
