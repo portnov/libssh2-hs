@@ -30,7 +30,7 @@ sendFile login host port path = do
       public = home </> ".ssh" </> "id_rsa.pub"
       private = home </> ".ssh" </> "id_rsa"
 
-  withSession host port $ \_ s -> do
+  withSession host port $ \s -> do
       r <- checkHost s host port known_hosts
       print r
       publicKeyAuthFile s login public private ""
@@ -45,7 +45,7 @@ receiveFile login host port path = do
       public = home </> ".ssh" </> "id_rsa.pub"
       private = home </> ".ssh" </> "id_rsa"
 
-  withSession host port $ \_ s -> do
+  withSession host port $ \s -> do
       r <- checkHost s host port known_hosts
       print r
       publicKeyAuthFile s login public private ""

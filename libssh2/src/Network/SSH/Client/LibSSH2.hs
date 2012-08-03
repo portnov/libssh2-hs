@@ -6,11 +6,9 @@ module Network.SSH.Client.LibSSH2
    -- * Functions
    withSSH2,
    withSession,
-   withSessionBlocking,
    withChannel,
    checkHost,
    readAllChannel,
-   retryIfNeeded,
    scpSendFile,
    scpReceiveFile,
    runShellCommands,
@@ -30,14 +28,6 @@ import System.IO
 import Network.SSH.Client.LibSSH2.Types
 import Network.SSH.Client.LibSSH2.Errors
 import Network.SSH.Client.LibSSH2.Foreign
-
--- | Check if handle is ready for reading in 10 seconds.
-waitSocket :: Handle -> Session -> IO Bool
-waitSocket h s = do
-  dirs <- blockedDirections s
-  if INBOUND `elem` dirs
-    then hWaitForInput h (10*1000)
-    else return True
 
 -- | Similar to Network.connectTo, but does not socketToHandle.
 socketConnect :: String -> Int -> IO Socket
@@ -60,35 +50,20 @@ withSSH2 :: FilePath          -- ^ Path to known_hosts file
          -> (Channel -> IO a) -- ^ Actions to perform on channel
          -> IO (Int, a)
 withSSH2 known_hosts public private login hostname port fn =
-  withSessionBlocking hostname port $ \s -> do
+  withSession hostname port $ \s -> do
     r <- checkHost s hostname port known_hosts
     publicKeyAuthFile s login public private ""
     withChannel s $ fn
 
 -- | Execute some actions within SSH2 session
-withSession :: String                      -- ^ Remote host name
-            -> Int                         -- ^ Remote port number (usually 22)
-            -> (Handle -> Session -> IO a) -- ^ Actions to perform on handle and session
+withSession :: String            -- ^ Remote host name
+            -> Int               -- ^ Remote port number (usually 22)
+            -> (Session -> IO a) -- ^ Actions to perform on handle and session
             -> IO a
 withSession hostname port fn = do
   sock <- socketConnect hostname port
-  handle <- socketToHandle sock ReadWriteMode 
   session <- initSession
-  handshake session sock
-  result <- fn handle session
-  disconnectSession session "Done."
-  freeSession session
-  hClose handle
-  return result
-
--- | Execute some actions within SSH2 session
-withSessionBlocking :: String                      -- ^ Remote host name
-            -> Int                         -- ^ Remote port number (usually 22)
-            -> (Session -> IO a) -- ^ Actions to perform on handle and session
-            -> IO a
-withSessionBlocking hostname port fn = do
-  sock <- socketConnect hostname port
-  session <- initSession
+  setBlocking session False
   handshake session sock
   result <- fn session
   disconnectSession session "Done."
@@ -113,7 +88,6 @@ checkHost s host port path = do
 withChannel :: Session -> (Channel -> IO a) -> IO (Int, a)
 withChannel s fn = do
   ch <- openChannelSession s
-  -- waitSocket sock s
   result <- fn ch
   closeChannel ch
   exitStatus <- channelExitStatus ch
@@ -189,15 +163,3 @@ scpReceiveFile s remote local = do
   closeChannel ch
   freeChannel ch
   return result
-
--- | Retry the action repeatedly, while it fails with EAGAIN.
--- This does matter if using nonblocking mode.
-retryIfNeeded :: Handle -> Session -> IO a -> IO a
-retryIfNeeded handle session action =
-  action `E.catch` (\(e :: ErrorCode) ->
-                      if e == EAGAIN
-                        then do
-                             waitSocket handle session
-                             retryIfNeeded handle session action
-                        else throw e )
-
