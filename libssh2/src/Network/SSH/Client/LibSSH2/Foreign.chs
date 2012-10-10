@@ -368,9 +368,7 @@ writeChannelFromHandle ch h =
 
     bufferSize = 0x100000
 
-  in do
-    _ <- {# call trace #} (toPointer $ channelSession ch) (512)
-    allocaBytes bufferSize $ go 0 
+  in allocaBytes bufferSize $ go 0 
 
 -- | Read all data from channel to handle.
 -- Returns amount of transferred data.
