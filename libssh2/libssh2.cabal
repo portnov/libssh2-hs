@@ -60,3 +60,4 @@ Executable hs-ssh-client
   else
     buildable: False
   Main-Is: ssh-client.hs
+  GHC-Options: -threaded
