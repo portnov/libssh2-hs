@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface #-}
 
 #include "libssh2_local.h"
 #include <libssh2.h>
@@ -104,8 +104,18 @@ init_crypto :: Bool -> CInt
 init_crypto False = 1
 init_crypto True  = 0
 
-ssh2socket :: Socket -> CInt
-ssh2socket (MkSocket s _ _ _ _) = s
+ssh2socket :: Socket 
+#ifdef mingw32_HOST_OS
+           -> CUInt
+#else
+           -> CInt
+#endif
+ssh2socket (MkSocket s _ _ _ _) =
+#ifdef mingw32_HOST_OS
+  (fromIntegral s)
+#else
+  s
+#endif
 
 {# fun init as initialize_
   { init_crypto `Bool' } -> `Int' #}
@@ -116,7 +126,12 @@ initialize :: Bool -> IO ()
 initialize flags = void . handleInt Nothing $ initialize_ flags
 
 -- | Deinitialize libssh2.
+#ifdef mingw32_HOST_OS
+foreign import ccall safe "libssh2_exit"
+  exit:: IO ()
+#else
 {# fun exit as exit { } -> `()' #}
+#endif
 
 -- | Create Session object
 initSession :: IO Session
@@ -272,7 +287,15 @@ writeChannel ch bs =
   where
     go :: Int -> CULong -> CString -> IO () 
     go offset len cstr = do
-      written <- handleInt (Just $ channelSession ch) $ {# call channel_write_ex #} (toPointer ch) 0 (cstr `plusPtr` offset) len
+      written <- handleInt (Just $ channelSession ch) 
+                           $ {# call channel_write_ex #} (toPointer ch) 
+                                                         0 
+                                                         (cstr `plusPtr` offset) 
+#ifdef mingw32_HOST_OS
+                                                         (fromIntegral len)
+#else
+                                                         len
+#endif
       if fromIntegral written < len 
         then go (offset + fromIntegral written) (len - fromIntegral written) cstr
         else return ()
