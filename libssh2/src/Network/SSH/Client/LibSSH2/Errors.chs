@@ -111,6 +111,9 @@ instance IntResult (Int, a, b) where
 instance IntResult (Int, a, b, c) where
   intResult = \(i, _, _, _) -> i
 
+instance IntResult CInt where
+  intResult = fromIntegral
+
 instance IntResult CLong where
   intResult = fromIntegral
 
