@@ -17,7 +17,9 @@ module Network.SSH.Client.LibSSH2
    execCommands,
 
    -- * Utilities
-   socketConnect
+   socketConnect,
+   sessionInit,
+   sessionClose,
   ) where
 
 import Control.Monad
@@ -67,15 +69,24 @@ withSession :: String            -- ^ Remote host name
             -> Int               -- ^ Remote port number (usually 22)
             -> (Session -> IO a) -- ^ Actions to perform on handle and session
             -> IO a
-withSession hostname port fn = do
-  sock <- socketConnect hostname port
-  session <- initSession
-  setBlocking session False
-  handshake session sock
-  result <- fn session
-  disconnectSession session "Done."
-  freeSession session
-  return result
+withSession hostname port = E.bracket (sessionInit hostname port) sessionClose
+
+--  | Initialize session to the gived host
+sessionInit :: String -> Int -> IO Session
+sessionInit hostname port = do
+      sock <- socketConnect hostname port
+      session <- initSession
+      setBlocking session False
+      handshake session sock
+      return session
+
+--  | Close active session
+sessionClose :: Session -> IO ()
+sessionClose session = do
+      disconnectSession session "Done."
+      freeSession session
+
+
 
 --  | Check remote host against known hosts list
 checkHost :: Session
