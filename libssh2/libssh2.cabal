@@ -61,6 +61,7 @@ Library
                        bytestring >= 0.9
 
   Extra-libraries:     "ssh2"
+  pkgconfig-depends:   libssh2 >= 1.2.8
   GHC-Options:         -Wall
   
   -- Other-modules:       
