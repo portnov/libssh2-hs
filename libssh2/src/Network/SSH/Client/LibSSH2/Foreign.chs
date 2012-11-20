@@ -291,11 +291,7 @@ writeChannel ch bs =
                            $ {# call channel_write_ex #} (toPointer ch) 
                                                          0 
                                                          (cstr `plusPtr` offset) 
-#ifdef mingw32_HOST_OS
                                                          (fromIntegral len)
-#else
-                                                         len
-#endif
       if fromIntegral written < len 
         then go (offset + fromIntegral written) (len - fromIntegral written) cstr
         else return ()
@@ -364,7 +360,7 @@ writeChannelFromHandle ch h =
                   0
                   (plusPtr buffer written)
                   (fromIntegral size)
-      send (written + fromIntegral sent) (size - sent) buffer
+      send (written + fromIntegral sent) (size - fromIntegral sent) buffer
 
     bufferSize = 0x100000
 
