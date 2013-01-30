@@ -47,6 +47,9 @@ import qualified Data.ByteString.Unsafe as BSS
 
 import Network.SSH.Client.LibSSH2.Types
 import Network.SSH.Client.LibSSH2.Errors
+#ifdef GCRYPT
+import Network.SSH.Client.LibSSH2.GCrypt
+#endif
 
 -- Known host flags. See libssh2 documentation.
 data KnownHostType =
@@ -123,7 +126,11 @@ ssh2socket (MkSocket s _ _ _ _) =
 -- | Initialize libssh2. Pass True to enable encryption
 -- or False to disable it.
 initialize :: Bool -> IO ()
+#ifdef GCRYPT
+initialize flags = void . handleInt Nothing $ gcryptFix >> initialize_ flags
+#else
 initialize flags = void . handleInt Nothing $ initialize_ flags
+#endif
 
 -- | Deinitialize libssh2.
 #ifdef mingw32_HOST_OS

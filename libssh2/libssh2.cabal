@@ -42,6 +42,10 @@ Extra-source-files:  ssh-client.hs, Makefile, include/libssh2_local.h
 -- Constraint on the version of Cabal needed to build this package.
 Cabal-version:       >=1.8
 
+flag gcrypt
+  description: add hack that allows to run threaded program when libssh2 is built against gcrypt
+  default: False
+
 flag example-client
   description: Build the example client
   default: False
@@ -68,6 +72,12 @@ Library
   
   Build-tools:         c2hs
   HS-Source-Dirs:      src
+
+  if flag(gcrypt)
+      c-sources:           src/Network/SSH/Client/LibSSH2/FFI/gcrypt-fix.c
+      Includes:            gcrypt-fix.h
+      Exposed-modules:     Network.SSH.Client.LibSSH2.GCrypt
+      Cpp-options:         -DGCRYPT
   
 Executable hs-ssh-client
   if flag(example-client)
