@@ -21,6 +21,7 @@ module Network.SSH.Client.LibSSH2.Foreign
 
    -- * Authentication
    publicKeyAuthFile,
+   usernamePasswordAuth,
 
    -- * Channel functions
    openChannelSession, closeChannel, freeChannel,
@@ -236,6 +237,17 @@ publicKeyAuthFile :: Session -- ^ Session
                   -> IO ()
 publicKeyAuthFile session username public private passphrase = void . handleInt (Just session) $ 
   publicKeyAuthFile_ session username public private passphrase
+
+-- | Perform username/password authentication.
+usernamePasswordAuth :: Session -- ^ Session
+                     -> String  -- ^ Username
+                     -> String  -- ^ Password
+                     -> IO ()
+usernamePasswordAuth session username password =
+  withCString username $ \usernameptr -> do
+    withCString password $ \passwordptr -> do
+      void . handleInt (Just session) $
+        {# call userauth_password_ex #} (toPointer session) usernameptr (toEnum $ length username) passwordptr (toEnum $ length password) nullFunPtr
 
 {# fun channel_open_ex as openSessionChannelEx
   { toPointer `Session',

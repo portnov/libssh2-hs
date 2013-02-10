@@ -5,6 +5,7 @@ module Network.SSH.Client.LibSSH2
 
    -- * Functions
    withSSH2,
+   withSSH2User,
    withSession,
    withChannel,
    withChannelBy,
@@ -62,6 +63,23 @@ withSSH2 known_hosts public private passphrase login hostname port fn =
     when (r == MISMATCH) $ 
       error $ "Host key mismatch for host " ++ hostname
     publicKeyAuthFile s login public private passphrase 
+    fn s
+
+-- | Execute some actions within SSH2 connection.
+-- Uses username/password authentication.
+withSSH2User :: FilePath          -- ^ Path to known_hosts file
+         -> String            -- ^ Remote user name
+         -> String            -- ^ Remote password
+         -> String            -- ^ Remote host name
+         -> Int               -- ^ Remote port number (usually 22)
+         -> (Session -> IO a) -- ^ Actions to perform on session
+         -> IO a
+withSSH2User known_hosts login password hostname port fn =
+  withSession hostname port $ \s -> do
+    r <- checkHost s hostname port known_hosts
+    when (r == MISMATCH) $
+      error $ "Host key mismatch for host " ++ hostname
+    usernamePasswordAuth s login password
     fn s
 
 -- | Execute some actions within SSH2 session
