@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 
 import Control.Monad
 import Control.Monad.Trans.Resource
@@ -6,6 +7,8 @@ import Data.Conduit
 import Data.Conduit.Lazy
 import System.Environment
 import System.FilePath
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as C8
 import Codec.Binary.UTF8.String
 
 import Network.SSH.Client.LibSSH2.Foreign
@@ -24,12 +27,14 @@ ssh login host port command = do
   let known_hosts = home </> ".ssh" </> "known_hosts"
       public = home </> ".ssh" </> "id_rsa.pub"
       private = home </> ".ssh" </> "id_rsa"
-  withSessionBlocking host port $ \session -> do
+  withSession host port $ \session -> do
     r <- checkHost session host port known_hosts
     publicKeyAuthFile session login public private ""
-    (Just ch, src) <- execCommand True session command
-    res <- runResourceT $ lazyConsume src
-    forM (map decodeString res) putStrLn
+    (Just ch, !src) <- execCommand True session command
+    res <- runResourceT $ returnStrict =<< lazyConsume src
+    forM res C8.putStrLn
     rc <- getReturnCode ch
     putStrLn $ "Exit code: " ++ show rc
   exit
+
+returnStrict !x = return x

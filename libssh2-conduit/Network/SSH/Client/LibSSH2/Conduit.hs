@@ -1,84 +1,53 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Network.SSH.Client.LibSSH2.Conduit
   (sourceChannel,
-   splitLines,
    CommandsHandle,
    execCommand,
    getReturnCode
   ) where
 
 import Control.Monad
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.Control
-import System.IO.Unsafe (unsafeInterleaveIO)
 import Control.Concurrent.STM
 import Data.Monoid
 import Data.Conduit
+import qualified Data.Conduit.List as L
 import Data.Conduit.Lazy
+import qualified Data.Conduit.Binary as Binary
+import qualified Data.ByteString as B
 
 import Network.SSH.Client.LibSSH2.Foreign
 import Network.SSH.Client.LibSSH2
 
 -- | Read all contents of libssh2's Channel.
-sourceChannel :: Channel -> Source IO String
+sourceChannel :: MonadIO m => Channel -> Source m B.ByteString
 sourceChannel ch = src
   where
-    src = Source pull close
-
-    pull = do
-        (sz, res) <- liftIO $ readChannel ch 0x400
-        if sz > 0
-            then return $ Open src res
-            else return Closed
-
-    close = return ()
-
--- | Similar to Data.Conduit.Binary.lines, but for Strings.
-splitLines :: Resource m => Conduit String m String
-splitLines =
-    conduitState id push close
-  where
-    push front bs' = return $ StateProducing leftover ls
-      where
-        bs = front bs'
-        (leftover, ls) = getLines id bs
-
-    getLines front bs
-        | null bs = (id, front [])
-        | null y = ((x ++), front [])
-        | otherwise = getLines (front . (x:)) (drop 1 y)
-      where
-        (x, y) = break (== '\n') bs
-
-    close front
-        | null bs = return []
-        | otherwise = return [bs]
-      where
-        bs = front ""
+    src = do
+      res <- liftIO $ readChannel ch 0x400
+      if B.length res > 0
+        then do
+             yield res
+             src
+        else return ()
 
 -- | Execute one command and read it's output lazily.
 -- If first argument is True, then you *must* get return code
 -- using getReturnCode on returned CommandsHandle. Moreover,
 -- you *must* guarantee that getReturnCode will be called
 -- only when all command output will be read.
-execCommand :: Bool                          -- ^ Set to True if you want to get return code when command will terminate.
+execCommand :: MonadIO m
+            => Bool                          -- ^ Set to True if you want to get return code when command will terminate.
             -> Session
             -> String                        -- ^ Command
-            -> IO (Maybe CommandsHandle, Source IO String) 
+            -> IO (Maybe CommandsHandle, Source m B.ByteString) 
 execCommand b s cmd = do
   (ch, channel) <- initCH b s
-  let src = execCommandS ch channel cmd $= splitLines
+  let src = execCommandSrc ch channel cmd $= Binary.lines
   return (if b then Just ch else Nothing, src)
-
--- execCommands :: Bool -> Session -> [String] -> IO [String]
--- execCommands b s cmds = do
---   let srcs = [execCommandS (v i) s cmd | (i, cmd) <- zip [1..] cmds ]
---       v i | i == length cmds = var
---           | otherwise        = Nothing
---   res <- runResourceT $ lazyConsume $ mconcat srcs $= splitLines
---   return res
 
 -- | Handles channel opening and closing.
 data CommandsHandle = CommandsHandle {
@@ -126,29 +95,24 @@ getReturnCode ch = do
                    rc <- atomically $ takeTMVar v
                    return rc
     
-execCommandS :: CommandsHandle -> Channel -> String -> Source IO String
-execCommandS var channel command =
-  Source {
-      sourcePull = pull channel 
-    , sourceClose = return () }
+execCommandSrc :: MonadIO m => CommandsHandle -> Channel -> String -> Source m B.ByteString
+execCommandSrc var channel command = src $= (L.consume >>= mapM_ yield)
+                                     
   where
     
-    next ch =
-      Source (pullAnswer ch) $ do
-          return ()
-          --liftIO $ cleanupChannel var ch
-
+    src = do
+      liftIO $ channelExecute channel command
+      pullAnswer channel
+    
     pullAnswer ch = do
-      (sz, res) <- liftIO $ readChannel ch 0x400
-      if sz > 0
-        then return $ Open (next ch) res
+      res <- liftIO $ readChannel ch 0x400
+      if B.length res > 0
+        then do
+             yield res
+             pullAnswer ch
         else do
              liftIO $ cleanupChannel var ch
-             return Closed
-
-    pull ch = do
-      liftIO $ channelExecute ch command
-      pullAnswer ch
+             return ()
 
 -- | Close Channel and write return code
 cleanupChannel :: CommandsHandle -> Channel -> IO ()
