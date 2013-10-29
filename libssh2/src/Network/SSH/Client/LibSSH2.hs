@@ -24,7 +24,7 @@ module Network.SSH.Client.LibSSH2
 
 import Control.Monad
 import Control.Exception as E
-import Network
+import Network  hiding (sClose)
 import Network.BSD
 import Network.Socket
 import System.IO
