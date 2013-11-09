@@ -79,6 +79,7 @@ data ErrorCode =
   | SOCKET_RECV
   | ENCRYPT
   | BAD_SOCKET
+  | ERROR_KNOWN_HOSTS
   deriving (Eq, Show, Ord, Enum, Data, Typeable)
 
 instance Exception ErrorCode
