@@ -117,7 +117,11 @@ init_crypto True  = 0
 
 ssh2socket :: Socket 
 #ifdef mingw32_HOST_OS
+    #ifdef x86_64_HOST_ARCH
+           -> CULLong
+    #else
            -> CUInt
+    #endif
 #else
            -> CInt
 #endif
