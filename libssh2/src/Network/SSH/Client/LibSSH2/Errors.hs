@@ -123,12 +123,12 @@ instance IntResult CLong where
 
 getLastError_ :: Session -> Ptr Int -> Int -> IO (Int, String)
 getLastError_ a1 a3 a4 =
-  let {a1' = toPointer a1} in 
-  alloca $ \a2' -> 
-  let {a3' = castPtr a3} in 
-  let {a4' = fromIntegral a4} in 
+  let {a1' = toPointer a1} in
+  alloca $ \a2' ->
+  let {a3' = castPtr a3} in
+  let {a4' = fromIntegral a4} in
   getLastError_'_ a1' a2' a3' a4' >>= \res ->
-  peekCStringPtr  a2'>>= \a2'' -> 
+  peekCStringPtr  a2'>>= \a2'' ->
   let {res' = fromIntegral res} in
   return (res', a2'')
 {-# LINE 124 "src/Network/SSH/Client/LibSSH2/Errors.chs" #-}
@@ -147,7 +147,7 @@ handleInt s io = do
     then case int2error r of
            EAGAIN -> threadWaitSession s >> handleInt s io
            err    -> throwIO err
-    else return x 
+    else return x
 
 handleBool :: CInt -> IO Bool
 handleBool x
@@ -160,7 +160,7 @@ handleBool x
 handleNullPtr :: Maybe Session -> (Ptr () -> IO a) -> IO (Ptr ()) -> IO a
 handleNullPtr s fromPointer io = do
   p <- io
-  if p == nullPtr 
+  if p == nullPtr
     then case s of
       Nothing -> throw NULL_POINTER
       Just session -> do
@@ -173,7 +173,7 @@ handleNullPtr s fromPointer io = do
 -- | Get currently blocked directions
 blockedDirections :: Session -> IO ([Direction])
 blockedDirections a1 =
-  let {a1' = toPointer a1} in 
+  let {a1' = toPointer a1} in
   blockedDirections'_ a1' >>= \res ->
   let {res' = int2dir res} in
   return (res')
@@ -185,7 +185,7 @@ threadWaitSession (Just s) = do
   mSocket <- sessionGetSocket s
   case mSocket of
     Nothing -> error "EAGAIN thrown on session without socket"
-    Just socket -> do 
+    Just socket -> do
       dirs <- blockedDirections s
       when (INBOUND `elem` dirs)  $ threadWaitRead socket
       when (OUTBOUND `elem` dirs) $ threadWaitWrite socket
