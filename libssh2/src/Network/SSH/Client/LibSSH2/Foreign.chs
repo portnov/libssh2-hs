@@ -282,7 +282,10 @@ channelExecute c command = channelProcess c "exec" command
 
 -- | Execute shell command
 channelShell :: Channel -> IO () 
-channelShell c = void . handleInt (Just $ channelSession c) $ channelProcessStartup_ c "shell" ""  
+channelShell c = void . handleInt (Just $ channelSession c) $ do
+  withCStringLen "shell" $ \(s,l) -> do
+    res <- channelProcessStartup_'_ (toPointer c) s (fromIntegral l) nullPtr 0
+    return $ (res :: CInt)
 
 {# fun channel_request_pty_ex as requestPTYEx
   { toPointer `Channel',
