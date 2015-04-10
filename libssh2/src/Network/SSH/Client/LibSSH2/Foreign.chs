@@ -38,7 +38,7 @@ module Network.SSH.Client.LibSSH2.Foreign
    channelProcess, channelExecute, channelShell,
    requestPTY, requestPTYEx,
    channelExitStatus, channelExitSignal,
-   scpSendChannel, scpReceiveChannel,
+   scpSendChannel, scpReceiveChannel, pollChannelRead_,
 
    -- * Debug
    TraceFlag (..), setTraceMode
@@ -298,7 +298,7 @@ requestPTY :: Channel -> String -> IO ()
 requestPTY ch term = void . handleInt (Just $ channelSession ch) $ requestPTYEx ch term "" 0 0 0 0
 
 readChannelEx :: Channel -> Int -> Size -> IO BSS.ByteString 
-readChannelEx ch i size =
+readChannelEx ch i size = do
   allocaBytes (fromIntegral size) $ \buffer -> do
     rc <- handleInt (Just $ channelSession ch) $ {# call channel_read_ex #} (toPointer ch) (fromIntegral i) buffer size
     BSS.packCStringLen (buffer, fromIntegral rc)
@@ -491,3 +491,6 @@ scpReceiveChannel s path = do
        channel <- handleNullPtr (Just s) (channelFromPointer s) $ {# call scp_recv #} (toPointer s) pathptr statptr
        size <- {# get stat_t->st_size #} statptr
        return (channel, size)
+
+{# fun poll_channel_read as pollChannelRead_
+    { toPointer `Channel' } -> `Int' #}
