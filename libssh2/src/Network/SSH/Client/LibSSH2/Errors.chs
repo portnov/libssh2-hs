@@ -125,6 +125,9 @@ instance IntResult CInt where
 instance IntResult CLong where
   intResult = fromIntegral
 
+instance IntResult CLLong where
+  intResult = fromIntegral
+
 {# fun session_last_error as getLastError_
   { toPointer `Session',
     alloca- `String' peekCStringPtr*,
