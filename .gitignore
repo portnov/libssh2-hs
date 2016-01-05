@@ -1,11 +1,1 @@
-*.hi
-*.o
-*.chi
-*.swp
-*.chs.h
-dist/
-cabal-dev/
-libssh2/Network/SSH/Client/LibSSH2/Foreign.hs
-libssh2/Network/SSH/Client/LibSSH2/Types.hs
-libssh2/Network/SSH/Client/LibSSH2/Errors.hs
-ssh-client
+.stack-work/

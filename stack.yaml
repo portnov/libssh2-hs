@@ -1,0 +1,10 @@
+resolver: lts-3.20
+packages:
+  - libssh2/
+  - libssh2-conduit/
+
+extra-deps: []
+flags:
+  libssh2:
+    example-client: false
+    gcrypt: false
