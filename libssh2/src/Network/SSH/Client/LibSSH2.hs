@@ -55,14 +55,14 @@ withSSH2 :: FilePath          -- ^ Path to known_hosts file
          -> String            -- ^ Remote user name
          -> String            -- ^ Remote host name
          -> Int               -- ^ Remote port number (usually 22)
-         -> (Session -> IO a) -- ^ Actions to perform on session 
-         -> IO a 
+         -> (Session -> IO a) -- ^ Actions to perform on session
+         -> IO a
 withSSH2 known_hosts public private passphrase login hostname port fn =
   withSession hostname port $ \s -> do
     r <- checkHost s hostname port known_hosts
-    when (r == MISMATCH) $ 
+    when (r == MISMATCH) $
       error $ "Host key mismatch for host " ++ hostname
-    publicKeyAuthFile s login public private passphrase 
+    publicKeyAuthFile s login public private passphrase
     fn s
 
 -- | Execute some actions within SSH2 connection.
@@ -122,21 +122,34 @@ checkHost s host port path = do
 
 -- | Execute some actions withing SSH2 channel
 withChannel :: Session -> (Channel -> IO a) -> IO (Int, a)
-withChannel s = withChannelBy (openChannelSession s) id 
+withChannel s = withChannelBy (openChannelSession s) id
 
--- | Read all data from the channel 
+-- | Read all data from the channel
 --
 -- Although this function returns a lazy bytestring, the data is /not/ read
 -- lazily.
-readAllChannel :: Channel -> IO BSL.ByteString 
+readAllChannel :: Channel -> IO BSL.ByteString
 readAllChannel ch = go []
   where
     go :: [BSS.ByteString] -> IO BSL.ByteString
     go acc = do
       bs <- readChannel ch 0x400
       if BSS.length bs > 0
-        then go (bs : acc) 
-        else return (BSL.fromChunks $ reverse acc) 
+        then go (bs : acc)
+        else return (BSL.fromChunks $ reverse acc)
+
+readAllChannelNonBlocking :: Channel -> IO BSL.ByteString
+readAllChannelNonBlocking ch = go []
+  where
+    go :: [BSS.ByteString] -> IO BSL.ByteString
+    go acc = do
+      bs <- do i <- pollChannelRead_ ch
+               if i == 1
+                  then readChannel ch 0x400
+                  else return BSS.empty
+      if BSS.length bs > 0
+        then go (bs : acc)
+        else return (BSL.fromChunks $ reverse acc)
 
 -- | Write a lazy bytestring to the channel
 writeAllChannel :: Channel -> BSL.ByteString -> IO ()
@@ -146,23 +159,23 @@ runShellCommands :: Session -> [String] -> IO (Int, [BSL.ByteString])
 runShellCommands s commands = withChannel s $ \ch -> do
   requestPTY ch "linux"
   channelShell ch
-  _hello <- readAllChannel ch
+  _hello <- readAllChannelNonBlocking ch
   out <- forM commands $ \cmd -> do
              writeChannel ch (BSSC.pack $ cmd ++ "\n")
-             r <- readAllChannel ch
+             r <- readAllChannelNonBlocking ch
              return r
   channelSendEOF ch
   return out
 
 execCommands :: Session -> [String] -> IO (Int, [BSL.ByteString])
-execCommands s commands = withChannel s $ \ch -> 
+execCommands s commands = withChannel s $ \ch ->
   forM commands $ \cmd -> do
       channelExecute ch cmd
       readAllChannel ch
 
 -- | Send a file to remote host via SCP.
 -- Returns size of sent data.
-scpSendFile :: Session   
+scpSendFile :: Session
             -> Int       -- ^ File creation mode (0o777, for example)
             -> FilePath  -- ^ Path to local file
             -> FilePath  -- ^ Remote file path
@@ -176,7 +189,7 @@ scpSendFile s mode local remote = do
     channelWaitEOF ch
     return written
   hClose h
-  return result 
+  return result
 
 -- | Receive file from remote host via SCP.
 -- Returns size of received data.
@@ -186,7 +199,7 @@ scpReceiveFile :: Session   --
                -> IO Integer
 scpReceiveFile s remote local = do
   h <- openFile local WriteMode
-  (_, result) <- withChannelBy (scpReceiveChannel s remote) fst $ \(ch, fileSize) -> do  
+  (_, result) <- withChannelBy (scpReceiveChannel s remote) fst $ \(ch, fileSize) -> do
     readChannelToHandle ch h fileSize
   hClose h
   return result
@@ -194,12 +207,12 @@ scpReceiveFile s remote local = do
 -- | Generalization of 'withChannel'
 withChannelBy :: IO a            -- ^ Create a channel (and possibly other stuff)
               -> (a -> Channel)  -- ^ Extract the channel from "other stuff"
-              -> (a -> IO b)     -- ^ Actions to execute on the channel 
+              -> (a -> IO b)     -- ^ Actions to execute on the channel
               -> IO (Int, b)     -- ^ Channel exit status and return value
 withChannelBy createChannel extractChannel actions = do
   stuff <- createChannel
   let ch = extractChannel stuff
-  result <- actions stuff 
+  result <- actions stuff
   closeChannel ch
   exitStatus <- channelExitStatus ch
   freeChannel ch

@@ -16,12 +16,7 @@ License-file:        LICENSE
 
 Author:              IlyaPortnov
 
--- An email address to which users can send suggestions, bug reports,
--- and patches.
 Maintainer:          portnov84@rambler.ru
-
--- A copyright notice.
--- Copyright:           
 
 Category:            Network
 
@@ -34,13 +29,13 @@ Cabal-version:       >=1.6
 
 Library
   Exposed-modules:     Network.SSH.Client.LibSSH2.Conduit
-  
-  Build-depends:       base >= 4 && <5, stm, transformers,
-                       resourcet >= 0.4.7,
+
+  Build-depends:       base >= 4 && <5,
                        bytestring >= 0.10,
+                       conduit >= 1.0.7,
+                       conduit-extra,
+                       libssh2,
                        monad-control >= 0.3.1,
-                       conduit >= 1.0.7, libssh2
-  
-  -- Modules not exported by this package.
-  -- Other-modules:       
-  
+                       resourcet >= 0.4.7,
+                       stm,
+                       transformers
