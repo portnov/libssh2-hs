@@ -183,5 +183,7 @@ threadWaitSession (Just s) = do
     Nothing -> error "EAGAIN thrown on session without socket"
     Just socket -> do 
       dirs <- blockedDirections s
-      when (INBOUND `elem` dirs)  $ threadWaitRead socket
-      when (OUTBOUND `elem` dirs) $ threadWaitWrite socket
+      if (OUTBOUND `elem` dirs)
+        then threadWaitWrite socket
+        else threadWaitRead socket
+
