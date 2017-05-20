@@ -38,7 +38,7 @@ module Network.SSH.Client.LibSSH2.Foreign
    channelProcess, channelExecute, channelShell,
    requestPTY, requestPTYEx,
    channelExitStatus, channelExitSignal,
-   scpSendChannel, scpReceiveChannel, pollChannelRead_,
+   scpSendChannel, scpReceiveChannel, pollChannelRead,
 
    -- * Debug
    TraceFlag (..), setTraceMode
@@ -54,6 +54,7 @@ import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Unsafe as BSS
 
 import Network.SSH.Client.LibSSH2.Types
+import Network.SSH.Client.LibSSH2.WaitSocket
 import Network.SSH.Client.LibSSH2.Errors
 #ifdef GCRYPT
 import Network.SSH.Client.LibSSH2.GCrypt
@@ -496,5 +497,13 @@ scpReceiveChannel s path = do
        size <- {# get stat_t->st_size #} statptr
        return (channel, size)
 
-{# fun poll_channel_read as pollChannelRead_
-    { toPointer `Channel' } -> `Int' #}
+-- {# fun poll_channel_read as pollChannelRead_
+--     { toPointer `Channel' } -> `Int' #}
+
+pollChannelRead :: Channel -> IO ()
+pollChannelRead ch = do
+  mbSocket <- sessionGetSocket (channelSession ch)
+  case mbSocket of
+    Nothing -> error "pollChannelRead without socket present"
+    Just socket -> threadWaitRead socket
+
