@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Network.SSH.Client.LibSSH2
   (-- * Types
-   Session, Channel, KnownHosts,
+   Session, Channel, KnownHosts, Sftp, SftpHandle,
 
    -- * Functions
    withSSH2,
@@ -16,6 +16,11 @@ module Network.SSH.Client.LibSSH2
    scpReceiveFile,
    runShellCommands,
    execCommands,
+
+   -- * Sftp Functions
+   withSFTP,
+   withSFTPUser,
+   sftpListDir,
 
    -- * Utilities
    socketConnect,
@@ -216,3 +221,67 @@ withChannelBy createChannel extractChannel actions = do
   freeChannel ch
   return (exitStatus, result)
 
+-- | Execute some actions within SFTP connection.
+-- Uses public key authentication.
+withSFTP :: FilePath          -- ^ Path to known_hosts file
+         -> FilePath          -- ^ Path to public key file
+         -> FilePath          -- ^ Path to private key file
+         -> String            -- ^ Passphrase
+         -> String            -- ^ Remote user name
+         -> String            -- ^ Remote host name
+         -> Int               -- ^ Remote port number (usually 22)
+         -> (Sftp -> IO a)    -- ^ Actions to perform on session
+         -> IO a
+withSFTP known_hosts public private passphrase login hostname port fn =
+  withSession hostname port $ \s -> do
+    r <- checkHost s hostname port known_hosts
+    when (r == MISMATCH) $
+      error $ "Host key mismatch for host " ++ hostname
+    publicKeyAuthFile s login public private passphrase
+    withSftpSession s fn
+
+-- | Execute some actions within SSH2 connection.
+-- Uses username/password authentication.
+withSFTPUser :: FilePath      -- ^ Path to known_hosts file
+         -> String            -- ^ Remote user name
+         -> String            -- ^ Remote password
+         -> String            -- ^ Remote host name
+         -> Int               -- ^ Remote port number (usually 22)
+         -> (Sftp -> IO a)     -- ^ Actions to perform on session
+         -> IO a
+withSFTPUser known_hosts login password hostname port fn =
+  withSession hostname port $ \s -> do
+    r <- checkHost s hostname port known_hosts
+    when (r == MISMATCH) $
+      error $ "Host key mismatch for host " ++ hostname
+    usernamePasswordAuth s login password
+    withSftpSession s fn
+
+-- | Execute some actions within SSH2 session
+withSftpSession :: Session           -- ^ Remote host name
+                -> (Sftp -> IO a)    -- ^ Actions to perform on sftp session
+                -> IO a
+withSftpSession session =
+  E.bracket (sftpInit session) sftpShutdown
+
+sftpListDir :: Sftp -> String -> IO [BSS.ByteString]
+sftpListDir sftp path = do
+{-|
+  dirh <- sftpOpenDir sftp path
+  v <- sftpReadDir dirh
+  _ <- sftpCloseHandle dirh
+  return [v]
+ -}
+  withDirList sftp path $ \h -> do
+    collectFiles h []
+
+withDirList :: Sftp
+            -> String
+            -> (SftpHandle -> IO a)
+            -> IO a
+withDirList sftp path = E.bracket (sftpOpenDir sftp path) sftpCloseHandle
+
+collectFiles :: SftpHandle -> [BSS.ByteString] -> IO [ BSS.ByteString ]
+collectFiles h acc = do
+  v <- sftpReadDir h
+  if BSS.null v then return acc else collectFiles h (v : acc)

@@ -8,6 +8,7 @@
 #endif
 
 #include <libssh2.h>
+#include <libssh2_sftp.h>
 
 {# context lib="ssh2" prefix="libssh2" #}
 
@@ -15,6 +16,8 @@ module Network.SSH.Client.LibSSH2.Types
   (Session,
    KnownHosts,
    Channel,
+   Sftp,
+   SftpHandle,
    ToPointer (..),
    Direction (..),
    int2dir,
@@ -28,7 +31,12 @@ module Network.SSH.Client.LibSSH2.Types
    sessionFromPointer,
    sessionGetSocket,
    sessionSetSocket,
-   channelSession
+   channelSession,
+   sftpFromPointer,
+   sftpSession,
+   sftpHandlePtr,
+   sftpHandleFromPointer,
+   sftpHandleSession
   ) where
 
 import Foreign
@@ -131,3 +139,37 @@ int2dir 1 = [INBOUND]
 int2dir 2 = [OUTBOUND]
 int2dir 3 = [INBOUND, OUTBOUND]
 int2dir x = error $ "Unknown direction: " ++ show x
+
+--
+-- | Sftp support
+--
+
+sftpFromPointer :: Session -> Ptr () -> IO Sftp
+sftpFromPointer session ptr = return $ Sftp (castPtr ptr) session
+
+{# pointer *SFTP as CSftp #}
+
+data Sftp = Sftp { sftpPtr :: CSftp
+                 , sftpSession :: Session
+                 }
+
+instance Show Sftp where
+  show sftp = "<libssh2 sftp: " ++ show (sftpPtr sftp) ++ ">"
+
+instance ToPointer Sftp where
+  toPointer = castPtr . sftpPtr
+
+sftpHandleFromPointer :: Session -> Ptr () -> IO SftpHandle
+sftpHandleFromPointer session ptr = return $ SftpHandle (castPtr ptr) session
+
+{# pointer *SFTP_HANDLE as CSftpHandle #}
+
+data SftpHandle = SftpHandle { sftpHandlePtr :: CSftpHandle
+                             , sftpHandleSession :: Session
+                             }
+
+instance Show SftpHandle where
+  show handle = "<libssh2 sftp handle: " ++ show (sftpHandlePtr handle) ++ ">"
+
+instance ToPointer SftpHandle where
+  toPointer = castPtr . sftpHandlePtr

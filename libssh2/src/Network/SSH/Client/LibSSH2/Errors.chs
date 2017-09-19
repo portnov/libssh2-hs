@@ -8,12 +8,14 @@
 #endif
 
 #include <libssh2.h>
+#include <libssh2_sftp.h>
 
 {# context lib="ssh2" prefix="libssh2" #}
 
 module Network.SSH.Client.LibSSH2.Errors
   (-- * Types
    ErrorCode (..),
+   SftpErrorCode (..),
    NULL_POINTER,
 
    -- * Utilities
@@ -21,10 +23,12 @@ module Network.SSH.Client.LibSSH2.Errors
 
    -- * Functions
    getLastError,
+   getLastSftpError,
    handleInt,
    handleBool,
    handleNullPtr,
    int2error, error2int,
+   int2sftperror, sftperror2int,
    blockedDirections,
    threadWaitSession
   ) where
@@ -187,3 +191,43 @@ threadWaitSession (Just s) = do
         then threadWaitWrite socket
         else threadWaitRead socket
 
+-- | Sftp
+
+{# fun sftp_last_error as getLastSftpError_
+  {toPointer `Sftp'} -> `Int' #}
+
+-- | Get last sftp related error.
+getLastSftpError :: Sftp -> IO Int
+getLastSftpError sftp = getLastSftpError_ sftp
+
+sftperror2int :: (Num i) => SftpErrorCode -> i
+sftperror2int = fromIntegral . fromEnum
+
+int2sftperror :: (Integral i) => i -> SftpErrorCode
+int2sftperror = toEnum . fromIntegral
+
+-- | Sftp error code returning from libssh2
+data SftpErrorCode =
+    FX_OK
+  | FX_EOF
+  | FX_NO_SUCH_FILE
+  | FX_PERMISSION_DENIED
+  | FX_FAILURE
+  | FX_BAD_MESSAGE
+  | FX_NO_CONNECTION
+  | FX_CONNECTION_LOST
+  | FX_OP_UNSUPPORTED
+  | FX_INVALID_HANDLE
+  | FX_NO_SUCH_PATH
+  | FX_FILE_ALREADY_EXISTS
+  | FX_WRITE_PROTECT
+  | FX_NO_MEDIA
+  | FX_NO_SPACE_ON_FILESYSTEM
+  | FX_QUOTA_EXCEEDED
+  | FX_UNKNOWN_PRINCIPAL
+  | FX_LOCK_CONFLICT
+  | FX_DIR_NOT_EMPTY
+  | FX_NOT_A_DIRECTORY
+  | FX_INVALID_FILENAME
+  | FX_LINK_LOOP
+  deriving (Eq, Show, Ord, Enum, Data, Typeable)

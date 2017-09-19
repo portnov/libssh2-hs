@@ -9,6 +9,7 @@
 
 #include "libssh2_local.h"
 #include <libssh2.h>
+#include <libssh2_sftp.h>
 
 {# context lib="ssh2" prefix="libssh2" #}
 
@@ -40,6 +41,10 @@ module Network.SSH.Client.LibSSH2.Foreign
    channelExitStatus, channelExitSignal,
    scpSendChannel, scpReceiveChannel, pollChannelRead,
 
+   -- * SFTP functions
+   sftpInit, sftpShutdown,
+   sftpOpenDir, sftpReadDir, sftpCloseHandle,
+   
    -- * Debug
    TraceFlag (..), setTraceMode
   ) where
@@ -507,3 +512,78 @@ pollChannelRead ch = do
     Nothing -> error "pollChannelRead without socket present"
     Just socket -> threadWaitRead socket
 
+--
+-- | Sftp support
+--
+
+-- SFTP File Transfer Flags. See libssh2 documentation
+data SftpFileTransferFlags =
+    FXF_READ
+  | FXF_WRITE
+  | FXF_APPEND
+  | FXF_CREAT
+  | FXF_TRUNC
+  | FXF_EXCL
+  deriving (Eq, Show)
+
+ftf2int :: SftpFileTransferFlags -> CInt
+ftf2int FXF_READ   = 0x00000001
+ftf2int FXF_WRITE  = 0x00000002
+ftf2int FXF_APPEND = 0x00000004
+ftf2int FXF_CREAT  = 0x00000008
+ftf2int FXF_TRUNC  = 0x00000010
+ftf2int FXF_EXCL   = 0x00000020
+
+ftransferflags2int :: [SftpFileTransferFlags] -> CInt
+ftransferflags2int list = foldr (.|.) 0 (map ftf2int list)
+
+-- Flags for open_ex()
+data OpenExFlags = OpenFile
+                 | OpenDir
+                 deriving (Eq, Show)
+
+oef2int OpenFile = 0
+oef2int OpenDir  = 1
+
+sftpInit :: Session ->  IO Sftp
+sftpInit s = handleNullPtr (Just s) (sftpFromPointer s) $
+  sftpInit_ s
+
+sftpShutdown :: Sftp -> IO ()
+sftpShutdown sftp =
+  void . handleInt (Just $ sftpSession sftp ) $ sftpShutdown_ sftp
+
+{# fun sftp_init as sftpInit_
+  { toPointer `Session' } -> `Ptr ()' id #}
+
+{# fun sftp_shutdown as sftpShutdown_
+  { toPointer `Sftp' } -> `Int' #}
+
+-- | Open directory file handler
+sftpOpenDir :: Sftp -> String -> IO SftpHandle
+sftpOpenDir sftp path =
+  let session = sftpSession sftp
+  in
+    handleNullPtr (Just session) ( sftpHandleFromPointer session ) $
+      sftpOpenDir_ sftp path
+
+sftpOpenDir_ sftp path =
+  withCString path $ \pathptr -> do
+    {# call sftp_open_ex #} (toPointer sftp) pathptr (toEnum $ length path) 0 0 (oef2int OpenDir)
+
+-- | Read directory from file handler
+sftpReadDir :: SftpHandle -> IO BSS.ByteString
+sftpReadDir sftph = do
+  let bufflen = 512
+  allocaBytes bufflen $ \bufptr -> do
+    rc <- handleInt (Just $ sftpHandleSession sftph) $
+      {# call sftp_readdir_ex #} (toPointer sftph) bufptr (fromIntegral bufflen) nullPtr 0 nullPtr
+    BSS.packCStringLen (bufptr, intResult rc)
+
+-- | Close file handle
+sftpCloseHandle :: SftpHandle -> IO ()
+sftpCloseHandle sftph =
+  void . handleInt (Just $ sftpHandleSession sftph) $
+    {# call sftp_close_handle #} (toPointer sftph)
+
+-- | TODO: Get sftp error in case session_last_error indicates that it it the sftp error
