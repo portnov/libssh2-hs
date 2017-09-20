@@ -44,7 +44,10 @@ module Network.SSH.Client.LibSSH2.Foreign
    -- * SFTP functions
    sftpInit, sftpShutdown,
    sftpOpenDir, sftpReadDir, sftpCloseHandle,
-   
+   sftpRenameFile, sftpRenameFileEx,
+
+   RenameFlag (..),
+
    -- * Debug
    TraceFlag (..), setTraceMode
   ) where
@@ -566,8 +569,8 @@ sftpOpenDir sftp path =
       sftpOpenDir_ sftp path
 
 sftpOpenDir_ sftp path =
-  withCString path $ \pathptr -> do
-    {# call sftp_open_ex #} (toPointer sftp) pathptr (toEnum $ length path) 0 0 (oef2int OpenDir)
+  withCStringLen path $ \(pathP, pathL) -> do
+    {# call sftp_open_ex #} (toPointer sftp) pathP (toEnum pathL) 0 0 (oef2int OpenDir)
 
 -- | Read directory from file handler
 sftpReadDir :: SftpHandle -> IO (Maybe (BSS.ByteString, Integer))
@@ -592,3 +595,29 @@ sftpCloseHandle sftph =
   void . handleInt (Just $ sftpHandleSession sftph) $
     {# call sftp_close_handle #} (toPointer sftph)
 
+data RenameFlag =
+    RENAME_OVERWRITE
+  | RENAME_ATOMIC
+  | RENAME_NATIVE
+  deriving (Eq, Show)
+
+rf2long :: RenameFlag -> CLong
+rf2long RENAME_OVERWRITE = 0x00000001
+rf2long RENAME_ATOMIC    = 0x00000002
+rf2long RENAME_NATIVE    = 0x00000004
+
+renameFlag2int :: [RenameFlag] -> CLong
+renameFlag2int flags = foldr (.|.) 0 (map rf2long flags)
+
+-- | Rename a file
+sftpRenameFile :: Sftp -> String -> String -> IO ()
+sftpRenameFile sftp src dest =
+  sftpRenameFileEx sftp src dest [ RENAME_NATIVE, RENAME_ATOMIC, RENAME_OVERWRITE]
+
+-- | Rename a file
+sftpRenameFileEx :: Sftp -> String -> String -> [RenameFlag] -> IO ()
+sftpRenameFileEx sftp src dest flags =
+  withCStringLen src $ \(srcP, srcL) ->
+    withCStringLen dest $ \(destP, destL) ->
+      void . handleInt (Just $ sftpSession sftp) $
+         {# call sftp_rename_ex #} (toPointer sftp) srcP (toEnum srcL) destP (toEnum destL) (renameFlag2int flags )

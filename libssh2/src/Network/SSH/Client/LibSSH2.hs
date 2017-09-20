@@ -21,6 +21,7 @@ module Network.SSH.Client.LibSSH2
    withSFTP,
    withSFTPUser,
    sftpListDir,
+   sftpRenameFile,
 
    -- * Utilities
    socketConnect,
