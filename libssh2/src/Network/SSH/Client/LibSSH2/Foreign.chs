@@ -572,13 +572,21 @@ sftpOpenDir_ sftp path =
     {# call sftp_open_ex #} (toPointer sftp) pathptr (toEnum $ length path) 0 0 (oef2int OpenDir)
 
 -- | Read directory from file handler
-sftpReadDir :: SftpHandle -> IO BSS.ByteString
+sftpReadDir :: SftpHandle -> IO (Maybe (BSS.ByteString, Integer))
 sftpReadDir sftph = do
   let bufflen = 512
   allocaBytes bufflen $ \bufptr -> do
-    rc <- handleInt (Just $ sftpHandleSession sftph) $
-      {# call sftp_readdir_ex #} (toPointer sftph) bufptr (fromIntegral bufflen) nullPtr 0 nullPtr
-    BSS.packCStringLen (bufptr, intResult rc)
+    allocaBytes {# sizeof _LIBSSH2_SFTP_ATTRIBUTES #} $ \sftpattrptr -> do
+      rc <- handleInt (Just $ sftpHandleSession sftph) $
+        {# call sftp_readdir_ex #} (toPointer sftph) bufptr (fromIntegral bufflen) nullPtr 0 sftpattrptr
+      case rc == 0 of
+        False -> do
+         filesize <- {# get _LIBSSH2_SFTP_ATTRIBUTES->filesize #} sftpattrptr
+         filename <- BSS.packCStringLen (bufptr, intResult rc)
+         return $ Just (filename, toInteger filesize)
+        True ->
+           return Nothing
+
 
 -- | Close file handle
 sftpCloseHandle :: SftpHandle -> IO ()

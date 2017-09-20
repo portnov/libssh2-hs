@@ -264,14 +264,8 @@ withSftpSession :: Session           -- ^ Remote host name
 withSftpSession session =
   E.bracket (sftpInit session) sftpShutdown
 
-sftpListDir :: Sftp -> String -> IO [BSS.ByteString]
+sftpListDir :: Sftp -> String -> IO [(BSS.ByteString, Integer)]
 sftpListDir sftp path = do
-{-|
-  dirh <- sftpOpenDir sftp path
-  v <- sftpReadDir dirh
-  _ <- sftpCloseHandle dirh
-  return [v]
- -}
   withDirList sftp path $ \h -> do
     collectFiles h []
 
@@ -281,7 +275,10 @@ withDirList :: Sftp
             -> IO a
 withDirList sftp path = E.bracket (sftpOpenDir sftp path) sftpCloseHandle
 
-collectFiles :: SftpHandle -> [BSS.ByteString] -> IO [ BSS.ByteString ]
+collectFiles :: SftpHandle -> [(BSS.ByteString, Integer)] ->
+  IO [ (BSS.ByteString, Integer) ]
 collectFiles h acc = do
   v <- sftpReadDir h
-  if BSS.null v then return acc else collectFiles h (v : acc)
+  case v of
+    Nothing -> return acc
+    Just r  -> collectFiles h (r : acc)
