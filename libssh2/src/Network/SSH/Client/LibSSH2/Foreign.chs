@@ -145,9 +145,9 @@ ssh2socket (MkSocket s _ _ _ _) =
 -- or False to disable it.
 initialize :: Bool -> IO ()
 #ifdef GCRYPT
-initialize flags = void . handleInt Nothing $ gcryptFix >> initialize_ flags
+initialize flags = void . handleInt (Nothing :: Maybe Session) $ gcryptFix >> initialize_ flags
 #else
-initialize flags = void . handleInt Nothing $ initialize_ flags
+initialize flags = void . handleInt (Nothing :: Maybe Session) $ initialize_ flags
 #endif
 
 -- | Deinitialize libssh2.
@@ -160,7 +160,7 @@ foreign import ccall safe "libssh2_exit"
 
 -- | Create Session object
 initSession :: IO Session
-initSession = handleNullPtr Nothing sessionFromPointer $ 
+initSession = handleNullPtr (Nothing :: Maybe Session) sessionFromPointer $ 
   {# call session_init_ex #} nullFunPtr nullFunPtr nullFunPtr nullPtr
 
 {# fun session_free as freeSession_
@@ -200,7 +200,7 @@ handshake session socket = do
 
 -- | Create KnownHosts object for given session.
 initKnownHosts :: Session -> IO KnownHosts
-initKnownHosts session = handleNullPtr Nothing knownHostsFromPointer $ initKnownHosts_ session
+initKnownHosts session = handleNullPtr (Nothing :: Maybe Session) knownHostsFromPointer $ initKnownHosts_ session
 
 -- | Free KnownHosts object's memory
 {# fun knownhost_free as freeKnownHosts
@@ -213,7 +213,7 @@ initKnownHosts session = handleNullPtr Nothing knownHostsFromPointer $ initKnown
 knownHostsReadFile :: KnownHosts
                    -> FilePath   -- ^ Path to known_hosts file
                    -> IO Int
-knownHostsReadFile kh path = handleInt Nothing $ knownHostsReadFile_ kh path 1
+knownHostsReadFile kh path = handleInt (Nothing :: Maybe Session) $ knownHostsReadFile_ kh path 1
 
 -- | Get remote host public key
 {# fun session_hostkey as getHostKey
@@ -551,7 +551,7 @@ sftpInit s = handleNullPtr (Just s) (sftpFromPointer s) $
 
 sftpShutdown :: Sftp -> IO ()
 sftpShutdown sftp =
-  void . handleInt (Just $ sftpSession sftp ) $ sftpShutdown_ sftp
+  void . handleInt (Just sftp) $ sftpShutdown_ sftp
 
 {# fun sftp_init as sftpInit_
   { toPointer `Session' } -> `Ptr ()' id #}
@@ -562,9 +562,7 @@ sftpShutdown sftp =
 -- | Open directory file handler
 sftpOpenDir :: Sftp -> String -> IO SftpHandle
 sftpOpenDir sftp path =
-  let session = sftpSession sftp
-  in
-    handleNullPtr (Just session) ( sftpHandleFromPointer session ) $
+  handleNullPtr (Just sftp) ( sftpHandleFromPointer sftp ) $
       sftpOpenDir_ sftp path
 
 sftpOpenDir_ sftp path =
@@ -577,7 +575,7 @@ sftpReadDir sftph = do
   let bufflen = 512
   allocaBytes bufflen $ \bufptr -> do
     allocaBytes {# sizeof _LIBSSH2_SFTP_ATTRIBUTES #} $ \sftpattrptr -> do
-      rc <- handleInt (Just $ sftpHandleSession sftph) $
+      rc <- handleInt (Just sftph) $
         {# call sftp_readdir_ex #} (toPointer sftph) bufptr (fromIntegral bufflen) nullPtr 0 sftpattrptr
       case rc == 0 of
         False -> do
@@ -594,4 +592,3 @@ sftpCloseHandle sftph =
   void . handleInt (Just $ sftpHandleSession sftph) $
     {# call sftp_close_handle #} (toPointer sftph)
 
--- | TODO: Get sftp error in case session_last_error indicates that it it the sftp error

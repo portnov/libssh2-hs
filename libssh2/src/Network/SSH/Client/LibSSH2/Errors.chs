@@ -144,7 +144,7 @@ getLastError s = getLastError_ s nullPtr 0
 
 -- | Throw an exception if negative value passed,
 -- or return unchanged value.
-handleInt :: (IntResult a) => Maybe Session -> IO a -> IO a
+handleInt :: (IntResult a, SshCtx ctx) => Maybe ctx -> IO a -> IO a
 handleInt s io = do
   x <- io
   let r = intResult x
@@ -162,30 +162,32 @@ handleBool x
 
 -- | Throw an exception if null pointer passed,
 -- or return it casted to right type.
-handleNullPtr :: Maybe Session -> (Ptr () -> IO a) -> IO (Ptr ()) -> IO a
-handleNullPtr s fromPointer io = do
-  p <- io
-  if p == nullPtr 
-    then case s of
-      Nothing -> throw NULL_POINTER
-      Just session -> do
+handleNullPtr :: (SshCtx c) => Maybe c -> (Ptr () -> IO a) -> IO (Ptr ()) -> IO a
+handleNullPtr m_ctx fromPointer io = do
+  ptr <- io
+  if ptr == nullPtr
+    then case m_ctx of
+      Nothing  -> throw NULL_POINTER
+      Just ctx -> do
+        let session = getSession ctx
         (r, _) <- getLastError session
         case int2error r of
-          EAGAIN -> threadWaitSession (Just session) >> handleNullPtr s fromPointer io
-          err      -> throw err
-    else fromPointer p
+          EAGAIN -> threadWaitSession (Just session) >> handleNullPtr m_ctx fromPointer io
+          err    -> throwCtxSpecificError ctx err
+    else fromPointer ptr
 
 -- | Get currently blocked directions
 {# fun session_block_directions as blockedDirections
   { toPointer `Session' } -> `[Direction]' int2dir #}
 
-threadWaitSession :: Maybe Session -> IO ()
+threadWaitSession :: (SshCtx ctx) => Maybe ctx -> IO ()
 threadWaitSession Nothing = error "EAGAIN thrown without session present"
-threadWaitSession (Just s) = do
+threadWaitSession (Just ctx) = do
+  let s = getSession ctx
   mSocket <- sessionGetSocket s
   case mSocket of
     Nothing -> error "EAGAIN thrown on session without socket"
-    Just socket -> do 
+    Just socket -> do
       dirs <- blockedDirections s
       if (OUTBOUND `elem` dirs)
         then threadWaitWrite socket
@@ -231,3 +233,28 @@ data SftpErrorCode =
   | FX_INVALID_FILENAME
   | FX_LINK_LOOP
   deriving (Eq, Show, Ord, Enum, Data, Typeable)
+
+instance Exception SftpErrorCode
+
+
+class SshCtx a where
+  getSession :: a -> Session
+  throwCtxSpecificError :: a -> ErrorCode -> IO b
+
+instance SshCtx Session where
+  getSession = id
+  throwCtxSpecificError _ er = throw er
+
+instance SshCtx Sftp where
+  getSession = sftpSession
+
+  throwCtxSpecificError ctx SFTP_PROTOCOL = do
+    er <- getLastSftpError ctx
+    throw (int2sftperror er)
+  throwCtxSpecificError _ er = throw er
+
+instance SshCtx SftpHandle where
+  getSession = getSession . sftpHandleSession
+
+  throwCtxSpecificError ctx =
+    throwCtxSpecificError (sftpHandleSession ctx)

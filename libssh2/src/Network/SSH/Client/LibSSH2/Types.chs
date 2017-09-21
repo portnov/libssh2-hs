@@ -159,13 +159,13 @@ instance Show Sftp where
 instance ToPointer Sftp where
   toPointer = castPtr . sftpPtr
 
-sftpHandleFromPointer :: Session -> Ptr () -> IO SftpHandle
-sftpHandleFromPointer session ptr = return $ SftpHandle (castPtr ptr) session
+sftpHandleFromPointer :: Sftp -> Ptr () -> IO SftpHandle
+sftpHandleFromPointer sftp ptr = return $ SftpHandle (castPtr ptr) sftp
 
 {# pointer *SFTP_HANDLE as CSftpHandle #}
 
 data SftpHandle = SftpHandle { sftpHandlePtr :: CSftpHandle
-                             , sftpHandleSession :: Session
+                             , sftpHandleSession :: Sftp
                              }
 
 instance Show SftpHandle where
