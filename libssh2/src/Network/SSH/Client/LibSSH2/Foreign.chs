@@ -544,11 +544,12 @@ ftf2int FXF_EXCL   = 0x00000020
 ftransferflags2int :: [SftpFileTransferFlags] -> CULong
 ftransferflags2int list = foldr (.|.) 0 (map ftf2int list)
 
--- Flags for open_ex()
+-- | Flags for open_ex()
 data OpenExFlags = OpenFile
                  | OpenDir
                  deriving (Eq, Show)
 
+oef2int :: (Num a) => OpenExFlags -> a
 oef2int OpenFile = 0
 oef2int OpenDir  = 1
 
@@ -578,6 +579,7 @@ sftpOpenDir sftp path =
   handleNullPtr (Just sftp) ( sftpHandleFromPointer sftp ) $
       sftpOpen_ sftp path 0 [] (oef2int OpenDir)
 
+sftpOpen_ :: Sftp -> String -> CLong -> [SftpFileTransferFlags] -> CInt -> IO (Ptr ())
 sftpOpen_ sftp path mode fl open_type =
   let flags = ftransferflags2int fl
   in
