@@ -47,7 +47,7 @@ module Network.SSH.Client.LibSSH2.Foreign
    sftpOpenFile,
    sftpRenameFile, sftpRenameFileEx,
    sftpWriteFileFromHandler, sftpReadFileToHandler,
-   sftpFstat,
+   sftpFstat, sftpDeleteFile,
 
    RenameFlag (..), SftpFileTransferFlags (..),
    SftpAttributes (..),
@@ -622,20 +622,25 @@ rf2long RENAME_NATIVE    = 0x00000004
 renameFlag2int :: [RenameFlag] -> CLong
 renameFlag2int flags = foldr (.|.) 0 (map rf2long flags)
 
--- | Rename a file
-sftpRenameFile :: Sftp -> String -> String -> IO ()
+-- | Rename a file on the sftp server
+sftpRenameFile :: Sftp     -- ^ Opened sftp session
+               -> FilePath -- ^ Old file name
+               -> FilePath -- ^ New file name
+               -> IO ()
 sftpRenameFile sftp src dest =
   sftpRenameFileEx sftp src dest [ RENAME_NATIVE, RENAME_ATOMIC, RENAME_OVERWRITE]
 
--- | Rename a file
-sftpRenameFileEx :: Sftp -> String -> String -> [RenameFlag] -> IO ()
+-- | Rename a file on the sftp server
+sftpRenameFileEx :: Sftp         -- ^ Opened sftp session
+                 -> FilePath     -- ^ Old file name
+                 -> FilePath     -- ^ New file name
+                 -> [RenameFlag] -- ^ Rename flags
+                 -> IO ()
 sftpRenameFileEx sftp src dest flags =
   withCStringLen src $ \(srcP, srcL) ->
     withCStringLen dest $ \(destP, destL) ->
       void . handleInt (Just $ sftpSession sftp) $
          {# call sftp_rename_ex #} (toPointer sftp) srcP (toEnum srcL) destP (toEnum destL) (renameFlag2int flags )
-
--- | Upload / Download files to the SFTP
 
 -- | Download file from the sftp server
 sftpReadFileToHandler :: SftpHandle -> Handle -> Int -> IO Int
@@ -703,7 +708,9 @@ data SftpAttributes = SftpAttributes {
   saMtime :: CULong
   } deriving (Show, Eq)
 
-sftpFstat :: SftpHandle -> IO (SftpAttributes)
+-- | Get sftp attributes from the sftp handler
+sftpFstat :: SftpHandle
+          -> IO (SftpAttributes)
 sftpFstat sftph = do
   allocaBytes {# sizeof _LIBSSH2_SFTP_ATTRIBUTES #} $ \sftpattrptr -> do
     _ <- handleInt (Just sftph) $
@@ -720,3 +727,12 @@ parseSftpAttributes sftpattrptr = do
     mtime<- {# get _LIBSSH2_SFTP_ATTRIBUTES->mtime #} sftpattrptr
 
     return $ SftpAttributes flags size uid gid perm atime mtime
+
+-- | Delete file from SFTP server
+sftpDeleteFile :: Sftp     -- ^ Opened sftp session
+               -> FilePath -- ^ Path to the file to be deleted
+               -> IO ()
+sftpDeleteFile sftp path = do
+  withCStringLen path $ \(str,len) -> do
+    void . handleInt (Just sftp) $
+      {# call sftp_unlink_ex #} (toPointer sftp) str (toEnum len)
