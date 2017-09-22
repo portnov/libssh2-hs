@@ -44,9 +44,12 @@ module Network.SSH.Client.LibSSH2.Foreign
    -- * SFTP functions
    sftpInit, sftpShutdown,
    sftpOpenDir, sftpReadDir, sftpCloseHandle,
+   sftpOpenFile,
    sftpRenameFile, sftpRenameFileEx,
+   sftpWriteFileFromHandler, sftpReadFileToHandler,
+   sftpFstatGet,
 
-   RenameFlag (..),
+   RenameFlag (..), SftpFileTransferFlags (..),
 
    -- * Debug
    TraceFlag (..), setTraceMode
@@ -529,7 +532,7 @@ data SftpFileTransferFlags =
   | FXF_EXCL
   deriving (Eq, Show)
 
-ftf2int :: SftpFileTransferFlags -> CInt
+ftf2int :: SftpFileTransferFlags -> CULong
 ftf2int FXF_READ   = 0x00000001
 ftf2int FXF_WRITE  = 0x00000002
 ftf2int FXF_APPEND = 0x00000004
@@ -537,7 +540,7 @@ ftf2int FXF_CREAT  = 0x00000008
 ftf2int FXF_TRUNC  = 0x00000010
 ftf2int FXF_EXCL   = 0x00000020
 
-ftransferflags2int :: [SftpFileTransferFlags] -> CInt
+ftransferflags2int :: [SftpFileTransferFlags] -> CULong
 ftransferflags2int list = foldr (.|.) 0 (map ftf2int list)
 
 -- Flags for open_ex()
@@ -562,15 +565,23 @@ sftpShutdown sftp =
 {# fun sftp_shutdown as sftpShutdown_
   { toPointer `Sftp' } -> `Int' #}
 
+-- | Open regular file handler
+sftpOpenFile :: Sftp -> String -> Int -> [SftpFileTransferFlags] -> IO SftpHandle
+sftpOpenFile sftp path mode flags =
+  handleNullPtr (Just sftp) ( sftpHandleFromPointer sftp ) $
+      sftpOpen_ sftp path (toEnum mode) flags (oef2int OpenFile)
+
 -- | Open directory file handler
 sftpOpenDir :: Sftp -> String -> IO SftpHandle
 sftpOpenDir sftp path =
   handleNullPtr (Just sftp) ( sftpHandleFromPointer sftp ) $
-      sftpOpenDir_ sftp path
+      sftpOpen_ sftp path 0 [] (oef2int OpenDir)
 
-sftpOpenDir_ sftp path =
-  withCStringLen path $ \(pathP, pathL) -> do
-    {# call sftp_open_ex #} (toPointer sftp) pathP (toEnum pathL) 0 0 (oef2int OpenDir)
+sftpOpen_ sftp path mode fl open_type =
+  let flags = ftransferflags2int fl
+  in
+    withCStringLen path $ \(pathP, pathL) -> do
+      {# call sftp_open_ex #} (toPointer sftp) pathP (toEnum pathL) flags mode open_type
 
 -- | Read directory from file handler
 sftpReadDir :: SftpHandle -> IO (Maybe (BSS.ByteString, Integer))
@@ -621,3 +632,69 @@ sftpRenameFileEx sftp src dest flags =
     withCStringLen dest $ \(destP, destL) ->
       void . handleInt (Just $ sftpSession sftp) $
          {# call sftp_rename_ex #} (toPointer sftp) srcP (toEnum srcL) destP (toEnum destL) (renameFlag2int flags )
+
+-- | Upload / Download files to the SFTP
+
+-- | Download file from the sftp server
+sftpReadFileToHandler :: SftpHandle -> Handle -> Int -> IO Int
+sftpReadFileToHandler sftph fh fileSize =
+  let
+    go :: Int -> Ptr a -> IO Int
+    go received buffer = do
+      let toRead :: Int
+          toRead = min (fromIntegral fileSize - received) bufferSize
+      sz <- receive toRead buffer 0
+      _ <- hPutBuf fh buffer sz
+      let newreceived :: Int
+          newreceived = (received + fromIntegral sz)
+      if newreceived < fromIntegral fileSize
+         then go newreceived buffer
+         else return $ fromIntegral newreceived
+
+    receive :: Int -> Ptr a -> Int -> IO Int
+    receive 0 _ read_sz = return read_sz
+    receive toread buf alreadyread = do
+       received <- handleInt (Just sftph)
+                       $ {# call sftp_read #} (toPointer sftph)
+                                              (buf `plusPtr` alreadyread)
+                                              (fromIntegral toread)
+       receive (toread - fromIntegral received) buf (alreadyread + fromIntegral received)
+
+    bufferSize = 0x100000
+
+  in allocaBytes bufferSize $ go 0
+
+-- | Upload file to the sftp server
+sftpWriteFileFromHandler :: SftpHandle -> Handle -> IO Integer
+sftpWriteFileFromHandler sftph fh =
+  let
+    go :: Integer -> Ptr a -> IO Integer
+    go done buffer = do
+      sz <- hGetBuf fh buffer bufferSize
+      send 0 (fromIntegral sz) buffer
+      let newDone = done + fromIntegral sz
+      if sz < bufferSize
+        then return newDone
+        else go newDone buffer
+
+    send :: Int -> CLong -> Ptr a -> IO ()
+    send _ 0 _ = return ()
+    send written size buf = do
+      sent <- handleInt (Just sftph)
+                           $ {# call sftp_write #} (toPointer sftph)
+                                                   (buf `plusPtr` written)
+                                                   (fromIntegral size)
+      send (written + fromIntegral sent) (size - fromIntegral sent) buf
+
+    bufferSize :: Int
+    bufferSize = 0x100000
+
+  in allocaBytes bufferSize $ go 0
+
+sftpFstatGet :: SftpHandle -> IO (Integer)
+sftpFstatGet sftph = do
+  allocaBytes {# sizeof _LIBSSH2_SFTP_ATTRIBUTES #} $ \sftpattrptr -> do
+    _ <- handleInt (Just sftph) $
+       {# call sftp_fstat_ex #} (toPointer sftph) sftpattrptr 0
+    size <- {# get _LIBSSH2_SFTP_ATTRIBUTES->filesize #} sftpattrptr
+    return $ fromIntegral size

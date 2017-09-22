@@ -22,6 +22,8 @@ module Network.SSH.Client.LibSSH2
    withSFTPUser,
    sftpListDir,
    sftpRenameFile,
+   sftpSendFile,
+   sftpReceiveFile,
 
    -- * Utilities
    socketConnect,
@@ -283,3 +285,43 @@ collectFiles h acc = do
   case v of
     Nothing -> return acc
     Just r  -> collectFiles h (r : acc)
+
+
+-- | Send a file to remote host via SFTP
+-- Returns size of sent data.
+sftpSendFile :: Sftp
+             -> Int       -- ^ File creation mode (0o777, for example)
+             -> FilePath  -- ^ Path to local file
+             -> FilePath  -- ^ Remote file path
+             -> IO Integer
+sftpSendFile sftp mode local remote = do
+  fh <- openFile local ReadMode
+  _size <- hFileSize fh
+  result <- withOpenSftpFile sftp remote mode [FXF_WRITE, FXF_CREAT, FXF_TRUNC, FXF_EXCL] $ \sftph ->
+    sftpWriteFileFromHandler sftph fh
+  hClose fh
+  return result
+
+-- | Send a file to remote host via SFTP
+-- Returns size of sent data.
+sftpReceiveFile :: Sftp
+                -> Int
+                -> FilePath  -- ^ Path to local file
+                -> FilePath  -- ^ Remote file path
+                -> IO Integer
+sftpReceiveFile sftp _mode local remote = do
+  fh <- openFile local WriteMode
+  result <- withOpenSftpFile sftp remote 0 [FXF_READ] $ \sftph -> do
+    filesize <- sftpFstatGet sftph
+    sftpReadFileToHandler sftph fh (fromIntegral filesize)
+  hClose fh
+  return $ fromIntegral result
+
+withOpenSftpFile :: Sftp
+                 -> String
+                 -> Int
+                 -> [SftpFileTransferFlags]
+                 -> (SftpHandle -> IO a)
+                 -> IO a
+withOpenSftpFile sftp path mode flags =
+  E.bracket (sftpOpenFile sftp path mode flags) sftpCloseHandle
