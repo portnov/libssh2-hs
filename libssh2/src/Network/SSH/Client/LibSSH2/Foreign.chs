@@ -47,9 +47,10 @@ module Network.SSH.Client.LibSSH2.Foreign
    sftpOpenFile,
    sftpRenameFile, sftpRenameFileEx,
    sftpWriteFileFromHandler, sftpReadFileToHandler,
-   sftpFstatGet,
+   sftpFstat,
 
    RenameFlag (..), SftpFileTransferFlags (..),
+   SftpAttributes (..),
 
    -- * Debug
    TraceFlag (..), setTraceMode
@@ -584,7 +585,7 @@ sftpOpen_ sftp path mode fl open_type =
       {# call sftp_open_ex #} (toPointer sftp) pathP (toEnum pathL) flags mode open_type
 
 -- | Read directory from file handler
-sftpReadDir :: SftpHandle -> IO (Maybe (BSS.ByteString, Integer))
+sftpReadDir :: SftpHandle -> IO (Maybe (BSS.ByteString, SftpAttributes))
 sftpReadDir sftph = do
   let bufflen = 512
   allocaBytes bufflen $ \bufptr -> do
@@ -593,12 +594,11 @@ sftpReadDir sftph = do
         {# call sftp_readdir_ex #} (toPointer sftph) bufptr (fromIntegral bufflen) nullPtr 0 sftpattrptr
       case rc == 0 of
         False -> do
-         filesize <- {# get _LIBSSH2_SFTP_ATTRIBUTES->filesize #} sftpattrptr
+         fstat    <- parseSftpAttributes sftpattrptr
          filename <- BSS.packCStringLen (bufptr, intResult rc)
-         return $ Just (filename, toInteger filesize)
+         return $ Just (filename, fstat)
         True ->
            return Nothing
-
 
 -- | Close file handle
 sftpCloseHandle :: SftpHandle -> IO ()
@@ -691,10 +691,30 @@ sftpWriteFileFromHandler sftph fh =
 
   in allocaBytes bufferSize $ go 0
 
-sftpFstatGet :: SftpHandle -> IO (Integer)
-sftpFstatGet sftph = do
+data SftpAttributes = SftpAttributes {
+  saFlags :: CULong,
+  saFileSize :: CULLong,
+  saUid :: CULong,
+  saGid :: CULong,
+  saPermissions :: CULong,
+  saAtime :: CULong,
+  saMtime :: CULong
+  } deriving (Show, Eq)
+
+sftpFstat :: SftpHandle -> IO (SftpAttributes)
+sftpFstat sftph = do
   allocaBytes {# sizeof _LIBSSH2_SFTP_ATTRIBUTES #} $ \sftpattrptr -> do
     _ <- handleInt (Just sftph) $
        {# call sftp_fstat_ex #} (toPointer sftph) sftpattrptr 0
+    parseSftpAttributes sftpattrptr
+
+parseSftpAttributes sftpattrptr = do
+    flags<- {# get _LIBSSH2_SFTP_ATTRIBUTES->flags #} sftpattrptr
     size <- {# get _LIBSSH2_SFTP_ATTRIBUTES->filesize #} sftpattrptr
-    return $ fromIntegral size
+    uid  <- {# get _LIBSSH2_SFTP_ATTRIBUTES->uid #} sftpattrptr
+    gid  <- {# get _LIBSSH2_SFTP_ATTRIBUTES->gid #} sftpattrptr
+    perm <- {# get _LIBSSH2_SFTP_ATTRIBUTES->permissions #} sftpattrptr
+    atime<- {# get _LIBSSH2_SFTP_ATTRIBUTES->atime #} sftpattrptr
+    mtime<- {# get _LIBSSH2_SFTP_ATTRIBUTES->mtime #} sftpattrptr
+
+    return $ SftpAttributes flags size uid gid perm atime mtime

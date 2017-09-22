@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Network.SSH.Client.LibSSH2
   (-- * Types
-   Session, Channel, KnownHosts, Sftp, SftpHandle,
+   Session, Channel, KnownHosts, Sftp, SftpHandle, SftpFileTransferFlags,
 
    -- * Functions
    withSSH2,
@@ -24,6 +24,7 @@ module Network.SSH.Client.LibSSH2
    sftpRenameFile,
    sftpSendFile,
    sftpReceiveFile,
+   sftpFstat,
 
    -- * Utilities
    socketConnect,
@@ -267,9 +268,11 @@ withSftpSession :: Session           -- ^ Remote host name
 withSftpSession session =
   E.bracket (sftpInit session) sftpShutdown
 
-sftpListDir :: Sftp -> String -> IO [(BSS.ByteString, Integer)]
-sftpListDir sftp path = do
-  withDirList sftp path $ \h -> do
+type SftpList = [(BSS.ByteString, SftpAttributes)]
+
+sftpListDir :: Sftp -> String -> IO SftpList
+sftpListDir sftp path =
+  withDirList sftp path $ \h ->
     collectFiles h []
 
 withDirList :: Sftp
@@ -278,8 +281,7 @@ withDirList :: Sftp
             -> IO a
 withDirList sftp path = E.bracket (sftpOpenDir sftp path) sftpCloseHandle
 
-collectFiles :: SftpHandle -> [(BSS.ByteString, Integer)] ->
-  IO [ (BSS.ByteString, Integer) ]
+collectFiles :: SftpHandle -> SftpList -> IO SftpList
 collectFiles h acc = do
   v <- sftpReadDir h
   case v of
@@ -312,8 +314,8 @@ sftpReceiveFile :: Sftp
 sftpReceiveFile sftp _mode local remote = do
   fh <- openFile local WriteMode
   result <- withOpenSftpFile sftp remote 0 [FXF_READ] $ \sftph -> do
-    filesize <- sftpFstatGet sftph
-    sftpReadFileToHandler sftph fh (fromIntegral filesize)
+    fstat <- sftpFstat sftph
+    sftpReadFileToHandler sftph fh (fromIntegral $ saFileSize fstat)
   hClose fh
   return $ fromIntegral result
 
