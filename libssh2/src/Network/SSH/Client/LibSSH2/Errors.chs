@@ -151,8 +151,11 @@ handleInt s io = do
   if r < 0
     then case int2error r of
            EAGAIN -> threadWaitSession s >> handleInt s io
-           err    -> throwIO err
-    else return x 
+           err    ->
+             case s of
+               Nothing  -> throw err
+               Just ctx -> throwCtxSpecificError ctx err
+    else return x
 
 handleBool :: CInt -> IO Bool
 handleBool x
