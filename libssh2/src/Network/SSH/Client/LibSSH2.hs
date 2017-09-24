@@ -1,7 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Network.SSH.Client.LibSSH2
   (-- * Types
-   Session, Channel, KnownHosts, Sftp, SftpHandle, SftpAttributes, SftpList, SftpFileTransferFlags,
+   Session, Channel, KnownHosts, Sftp, SftpHandle,
+   SftpAttributes, SftpList, SftpFileTransferFlags,
 
    -- * Functions
    withSSH2,
@@ -278,8 +279,16 @@ sftpListDir :: Sftp        -- ^ Opened sftp session
             -> FilePath    -- ^ Remote directory to read
             -> IO SftpList
 sftpListDir sftp path =
-  withDirList sftp path $ \h ->
-    collectFiles h []
+  let
+    collectFiles :: SftpHandle -> SftpList -> IO SftpList
+    collectFiles h acc = do
+      v <- sftpReadDir h
+      case v of
+        Nothing -> return acc
+        Just r  -> collectFiles h (r : acc)
+  in
+    withDirList sftp path $ \h ->
+      collectFiles h []
 
 withDirList :: Sftp
             -> FilePath
@@ -287,12 +296,6 @@ withDirList :: Sftp
             -> IO a
 withDirList sftp path = E.bracket (sftpOpenDir sftp path) sftpCloseHandle
 
-collectFiles :: SftpHandle -> SftpList -> IO SftpList
-collectFiles h acc = do
-  v <- sftpReadDir h
-  case v of
-    Nothing -> return acc
-    Just r  -> collectFiles h (r : acc)
 
 -- | Send a file to remote host via SFTP
 -- Returns size of sent data.
