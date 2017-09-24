@@ -9,6 +9,7 @@
 
 #include "libssh2_local.h"
 #include <libssh2.h>
+#include <libssh2_sftp.h>
 
 {# context lib="ssh2" prefix="libssh2" #}
 
@@ -39,6 +40,17 @@ module Network.SSH.Client.LibSSH2.Foreign
    requestPTY, requestPTYEx,
    channelExitStatus, channelExitSignal,
    scpSendChannel, scpReceiveChannel, pollChannelRead,
+
+   -- * SFTP functions
+   sftpInit, sftpShutdown,
+   sftpOpenDir, sftpReadDir, sftpCloseHandle,
+   sftpOpenFile,
+   sftpRenameFile, sftpRenameFileEx,
+   sftpWriteFileFromHandler, sftpReadFileToHandler,
+   sftpFstat, sftpDeleteFile,
+
+   RenameFlag (..), SftpFileTransferFlags (..),
+   SftpAttributes (..),
 
    -- * Debug
    TraceFlag (..), setTraceMode
@@ -140,9 +152,9 @@ ssh2socket (MkSocket s _ _ _ _) =
 -- or False to disable it.
 initialize :: Bool -> IO ()
 #ifdef GCRYPT
-initialize flags = void . handleInt Nothing $ gcryptFix >> initialize_ flags
+initialize flags = void . handleInt (Nothing :: Maybe Session) $ gcryptFix >> initialize_ flags
 #else
-initialize flags = void . handleInt Nothing $ initialize_ flags
+initialize flags = void . handleInt (Nothing :: Maybe Session) $ initialize_ flags
 #endif
 
 -- | Deinitialize libssh2.
@@ -155,7 +167,7 @@ foreign import ccall safe "libssh2_exit"
 
 -- | Create Session object
 initSession :: IO Session
-initSession = handleNullPtr Nothing sessionFromPointer $ 
+initSession = handleNullPtr (Nothing :: Maybe Session) sessionFromPointer $ 
   {# call session_init_ex #} nullFunPtr nullFunPtr nullFunPtr nullPtr
 
 {# fun session_free as freeSession_
@@ -195,7 +207,7 @@ handshake session socket = do
 
 -- | Create KnownHosts object for given session.
 initKnownHosts :: Session -> IO KnownHosts
-initKnownHosts session = handleNullPtr Nothing knownHostsFromPointer $ initKnownHosts_ session
+initKnownHosts session = handleNullPtr (Nothing :: Maybe Session) knownHostsFromPointer $ initKnownHosts_ session
 
 -- | Free KnownHosts object's memory
 {# fun knownhost_free as freeKnownHosts
@@ -208,7 +220,7 @@ initKnownHosts session = handleNullPtr Nothing knownHostsFromPointer $ initKnown
 knownHostsReadFile :: KnownHosts
                    -> FilePath   -- ^ Path to known_hosts file
                    -> IO Int
-knownHostsReadFile kh path = handleInt Nothing $ knownHostsReadFile_ kh path 1
+knownHostsReadFile kh path = handleInt (Nothing :: Maybe Session) $ knownHostsReadFile_ kh path 1
 
 -- | Get remote host public key
 {# fun session_hostkey as getHostKey
@@ -507,3 +519,220 @@ pollChannelRead ch = do
     Nothing -> error "pollChannelRead without socket present"
     Just socket -> threadWaitRead socket
 
+--
+-- | Sftp support
+--
+
+-- SFTP File Transfer Flags. See libssh2 documentation
+data SftpFileTransferFlags =
+    FXF_READ
+  | FXF_WRITE
+  | FXF_APPEND
+  | FXF_CREAT
+  | FXF_TRUNC
+  | FXF_EXCL
+  deriving (Eq, Show)
+
+ftf2int :: SftpFileTransferFlags -> CULong
+ftf2int FXF_READ   = 0x00000001
+ftf2int FXF_WRITE  = 0x00000002
+ftf2int FXF_APPEND = 0x00000004
+ftf2int FXF_CREAT  = 0x00000008
+ftf2int FXF_TRUNC  = 0x00000010
+ftf2int FXF_EXCL   = 0x00000020
+
+ftransferflags2int :: [SftpFileTransferFlags] -> CULong
+ftransferflags2int list = foldr (.|.) 0 (map ftf2int list)
+
+-- | Flags for open_ex()
+data OpenExFlags = OpenFile
+                 | OpenDir
+                 deriving (Eq, Show)
+
+oef2int :: (Num a) => OpenExFlags -> a
+oef2int OpenFile = 0
+oef2int OpenDir  = 1
+
+sftpInit :: Session ->  IO Sftp
+sftpInit s = handleNullPtr (Just s) (sftpFromPointer s) $
+  sftpInit_ s
+
+sftpShutdown :: Sftp -> IO ()
+sftpShutdown sftp =
+  void . handleInt (Just sftp) $ sftpShutdown_ sftp
+
+{# fun sftp_init as sftpInit_
+  { toPointer `Session' } -> `Ptr ()' id #}
+
+{# fun sftp_shutdown as sftpShutdown_
+  { toPointer `Sftp' } -> `Int' #}
+
+-- | Open regular file handler
+sftpOpenFile :: Sftp -> String -> Int -> [SftpFileTransferFlags] -> IO SftpHandle
+sftpOpenFile sftp path mode flags =
+  handleNullPtr (Just sftp) ( sftpHandleFromPointer sftp ) $
+      sftpOpen_ sftp path (toEnum mode) flags (oef2int OpenFile)
+
+-- | Open directory file handler
+sftpOpenDir :: Sftp -> String -> IO SftpHandle
+sftpOpenDir sftp path =
+  handleNullPtr (Just sftp) ( sftpHandleFromPointer sftp ) $
+      sftpOpen_ sftp path 0 [] (oef2int OpenDir)
+
+sftpOpen_ :: Sftp -> String -> CLong -> [SftpFileTransferFlags] -> CInt -> IO (Ptr ())
+sftpOpen_ sftp path mode fl open_type =
+  let flags = ftransferflags2int fl
+  in
+    withCStringLen path $ \(pathP, pathL) -> do
+      {# call sftp_open_ex #} (toPointer sftp) pathP (toEnum pathL) flags mode open_type
+
+-- | Read directory from file handler
+sftpReadDir :: SftpHandle -> IO (Maybe (BSS.ByteString, SftpAttributes))
+sftpReadDir sftph = do
+  let bufflen = 512
+  allocaBytes bufflen $ \bufptr -> do
+    allocaBytes {# sizeof _LIBSSH2_SFTP_ATTRIBUTES #} $ \sftpattrptr -> do
+      rc <- handleInt (Just sftph) $
+        {# call sftp_readdir_ex #} (toPointer sftph) bufptr (fromIntegral bufflen) nullPtr 0 sftpattrptr
+      case rc == 0 of
+        False -> do
+         fstat    <- parseSftpAttributes sftpattrptr
+         filename <- BSS.packCStringLen (bufptr, intResult rc)
+         return $ Just (filename, fstat)
+        True ->
+           return Nothing
+
+-- | Close file handle
+sftpCloseHandle :: SftpHandle -> IO ()
+sftpCloseHandle sftph =
+  void . handleInt (Just $ sftpHandleSession sftph) $
+    {# call sftp_close_handle #} (toPointer sftph)
+
+data RenameFlag =
+    RENAME_OVERWRITE
+  | RENAME_ATOMIC
+  | RENAME_NATIVE
+  deriving (Eq, Show)
+
+rf2long :: RenameFlag -> CLong
+rf2long RENAME_OVERWRITE = 0x00000001
+rf2long RENAME_ATOMIC    = 0x00000002
+rf2long RENAME_NATIVE    = 0x00000004
+
+renameFlag2int :: [RenameFlag] -> CLong
+renameFlag2int flags = foldr (.|.) 0 (map rf2long flags)
+
+-- | Rename a file on the sftp server
+sftpRenameFile :: Sftp     -- ^ Opened sftp session
+               -> FilePath -- ^ Old file name
+               -> FilePath -- ^ New file name
+               -> IO ()
+sftpRenameFile sftp src dest =
+  sftpRenameFileEx sftp src dest [ RENAME_NATIVE, RENAME_ATOMIC, RENAME_OVERWRITE]
+
+-- | Rename a file on the sftp server
+sftpRenameFileEx :: Sftp         -- ^ Opened sftp session
+                 -> FilePath     -- ^ Old file name
+                 -> FilePath     -- ^ New file name
+                 -> [RenameFlag] -- ^ Rename flags
+                 -> IO ()
+sftpRenameFileEx sftp src dest flags =
+  withCStringLen src $ \(srcP, srcL) ->
+    withCStringLen dest $ \(destP, destL) ->
+      void . handleInt (Just $ sftpSession sftp) $
+         {# call sftp_rename_ex #} (toPointer sftp) srcP (toEnum srcL) destP (toEnum destL) (renameFlag2int flags )
+
+-- | Download file from the sftp server
+sftpReadFileToHandler :: SftpHandle -> Handle -> Int -> IO Int
+sftpReadFileToHandler sftph fh fileSize =
+  let
+    go :: Int -> Ptr a -> IO Int
+    go received buffer = do
+      let toRead :: Int
+          toRead = min (fromIntegral fileSize - received) bufferSize
+      sz <- receive toRead buffer 0
+      _ <- hPutBuf fh buffer sz
+      let newreceived :: Int
+          newreceived = (received + fromIntegral sz)
+      if newreceived < fromIntegral fileSize
+         then go newreceived buffer
+         else return $ fromIntegral newreceived
+
+    receive :: Int -> Ptr a -> Int -> IO Int
+    receive 0 _ read_sz = return read_sz
+    receive toread buf alreadyread = do
+       received <- handleInt (Just sftph)
+                       $ {# call sftp_read #} (toPointer sftph)
+                                              (buf `plusPtr` alreadyread)
+                                              (fromIntegral toread)
+       receive (toread - fromIntegral received) buf (alreadyread + fromIntegral received)
+
+    bufferSize = 0x100000
+
+  in allocaBytes bufferSize $ go 0
+
+-- | Upload file to the sftp server
+sftpWriteFileFromHandler :: SftpHandle -> Handle -> IO Integer
+sftpWriteFileFromHandler sftph fh =
+  let
+    go :: Integer -> Ptr a -> IO Integer
+    go done buffer = do
+      sz <- hGetBuf fh buffer bufferSize
+      send 0 (fromIntegral sz) buffer
+      let newDone = done + fromIntegral sz
+      if sz < bufferSize
+        then return newDone
+        else go newDone buffer
+
+    send :: Int -> CLong -> Ptr a -> IO ()
+    send _ 0 _ = return ()
+    send written size buf = do
+      sent <- handleInt (Just sftph)
+                           $ {# call sftp_write #} (toPointer sftph)
+                                                   (buf `plusPtr` written)
+                                                   (fromIntegral size)
+      send (written + fromIntegral sent) (size - fromIntegral sent) buf
+
+    bufferSize :: Int
+    bufferSize = 0x100000
+
+  in allocaBytes bufferSize $ go 0
+
+data SftpAttributes = SftpAttributes {
+  saFlags :: CULong,
+  saFileSize :: CULLong,
+  saUid :: CULong,
+  saGid :: CULong,
+  saPermissions :: CULong,
+  saAtime :: CULong,
+  saMtime :: CULong
+  } deriving (Show, Eq)
+
+-- | Get sftp attributes from the sftp handler
+sftpFstat :: SftpHandle
+          -> IO (SftpAttributes)
+sftpFstat sftph = do
+  allocaBytes {# sizeof _LIBSSH2_SFTP_ATTRIBUTES #} $ \sftpattrptr -> do
+    _ <- handleInt (Just sftph) $
+       {# call sftp_fstat_ex #} (toPointer sftph) sftpattrptr 0
+    parseSftpAttributes sftpattrptr
+
+parseSftpAttributes sftpattrptr = do
+    flags<- {# get _LIBSSH2_SFTP_ATTRIBUTES->flags #} sftpattrptr
+    size <- {# get _LIBSSH2_SFTP_ATTRIBUTES->filesize #} sftpattrptr
+    uid  <- {# get _LIBSSH2_SFTP_ATTRIBUTES->uid #} sftpattrptr
+    gid  <- {# get _LIBSSH2_SFTP_ATTRIBUTES->gid #} sftpattrptr
+    perm <- {# get _LIBSSH2_SFTP_ATTRIBUTES->permissions #} sftpattrptr
+    atime<- {# get _LIBSSH2_SFTP_ATTRIBUTES->atime #} sftpattrptr
+    mtime<- {# get _LIBSSH2_SFTP_ATTRIBUTES->mtime #} sftpattrptr
+
+    return $ SftpAttributes flags size uid gid perm atime mtime
+
+-- | Delete file from SFTP server
+sftpDeleteFile :: Sftp     -- ^ Opened sftp session
+               -> FilePath -- ^ Path to the file to be deleted
+               -> IO ()
+sftpDeleteFile sftp path = do
+  withCStringLen path $ \(str,len) -> do
+    void . handleInt (Just sftp) $
+      {# call sftp_unlink_ex #} (toPointer sftp) str (toEnum len)

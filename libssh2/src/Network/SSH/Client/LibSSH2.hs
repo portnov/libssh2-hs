@@ -1,7 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Network.SSH.Client.LibSSH2
   (-- * Types
-   Session, Channel, KnownHosts,
+   Session, Channel, KnownHosts, Sftp, SftpHandle,
+   SftpAttributes, SftpList, SftpFileTransferFlags,
 
    -- * Functions
    withSSH2,
@@ -16,6 +17,16 @@ module Network.SSH.Client.LibSSH2
    scpReceiveFile,
    runShellCommands,
    execCommands,
+
+   -- * Sftp Functions
+   withSFTP,
+   withSFTPUser,
+   sftpListDir,
+   sftpRenameFile,
+   sftpSendFile, sftpSendFromHandle,
+   sftpReceiveFile, sftpReadFileToHandler,
+   sftpFstat,
+   sftpDeleteFile,
 
    -- * Utilities
    socketConnect,
@@ -216,3 +227,126 @@ withChannelBy createChannel extractChannel actions = do
   freeChannel ch
   return (exitStatus, result)
 
+-- | Execute some actions within SFTP connection.
+-- Uses public key authentication.
+withSFTP :: FilePath          -- ^ Path to known_hosts file
+         -> FilePath          -- ^ Path to public key file
+         -> FilePath          -- ^ Path to private key file
+         -> String            -- ^ Passphrase
+         -> String            -- ^ Remote user name
+         -> String            -- ^ Remote host name
+         -> Int               -- ^ Remote port number (usually 22)
+         -> (Sftp -> IO a)    -- ^ Actions to perform on sftp session
+         -> IO a
+withSFTP known_hosts public private passphrase login hostname port fn =
+  withSession hostname port $ \s -> do
+    r <- checkHost s hostname port known_hosts
+    when (r == MISMATCH) $
+      error $ "Host key mismatch for host " ++ hostname
+    publicKeyAuthFile s login public private passphrase
+    withSftpSession s fn
+
+-- | Execute some actions within SFTP connection.
+-- Uses username/password authentication.
+withSFTPUser :: FilePath          -- ^ Path to known_hosts file
+             -> String            -- ^ Remote user name
+             -> String            -- ^ Remote password
+             -> String            -- ^ Remote host name
+             -> Int               -- ^ Remote port number (usually 22)
+             -> (Sftp -> IO a)    -- ^ Actions to perform on sftp session
+             -> IO a
+withSFTPUser known_hosts login password hostname port fn =
+  withSession hostname port $ \s -> do
+    r <- checkHost s hostname port known_hosts
+    when (r == MISMATCH) $
+      error $ "Host key mismatch for host " ++ hostname
+    usernamePasswordAuth s login password
+    withSftpSession s fn
+
+-- | Execute some actions within SFTP session
+withSftpSession :: Session           -- ^ Remote host name
+                -> (Sftp -> IO a)    -- ^ Actions to perform on sftp session
+                -> IO a
+withSftpSession session =
+  E.bracket (sftpInit session) sftpShutdown
+
+type SftpList = [(BSS.ByteString, SftpAttributes)]
+
+-- | Reads directory information
+-- Returns the list of files with attributes, directory . and ..
+-- are not excluded
+sftpListDir :: Sftp        -- ^ Opened sftp session
+            -> FilePath    -- ^ Remote directory to read
+            -> IO SftpList
+sftpListDir sftp path =
+  let
+    collectFiles :: SftpHandle -> SftpList -> IO SftpList
+    collectFiles h acc = do
+      v <- sftpReadDir h
+      case v of
+        Nothing -> return acc
+        Just r  -> collectFiles h (r : acc)
+  in
+    withDirList sftp path $ \h ->
+      collectFiles h []
+
+withDirList :: Sftp
+            -> FilePath
+            -> (SftpHandle -> IO a)
+            -> IO a
+withDirList sftp path = E.bracket (sftpOpenDir sftp path) sftpCloseHandle
+
+
+-- | Send a file to remote host via SFTP
+-- Returns size of sent data.
+sftpSendFile :: Sftp      -- ^ Opened sftp session
+             -> FilePath  -- ^ Path to local file
+             -> FilePath  -- ^ Remote file path
+             -> Int       -- ^ File creation mode (0o777, for example)
+             -> IO Integer
+sftpSendFile sftp local remote mode =
+  withFile local ReadMode $ \fh ->
+    sftpSendFromHandle sftp fh remote mode
+
+-- | Send a file to remote host via SFTP
+-- Returns size of sent data.
+sftpSendFromHandle :: Sftp      -- ^ Opened sftp session
+                   -> Handle    -- ^ Handle to read from
+                   -> FilePath  -- ^ Remote file path
+                   -> Int       -- ^ File creation mode (0o777, for example)
+                   -> IO Integer
+sftpSendFromHandle sftp fh remote mode = do
+  let flags = [FXF_WRITE, FXF_CREAT, FXF_TRUNC, FXF_EXCL]
+  withOpenSftpFile sftp remote mode flags $ \sftph ->
+    sftpWriteFileFromHandler sftph fh
+
+-- | Received a file from remote host via SFTP
+-- Returns size of received data.
+sftpReceiveFile :: Sftp      -- ^ Opened sftp session
+                -> FilePath  -- ^ Path to local file
+                -> FilePath  -- ^ Remote file path
+                -> IO Integer
+sftpReceiveFile sftp local remote =
+  withFile local WriteMode $ \fh ->
+    sftpReceiveToHandle sftp remote fh
+
+-- | Received a file from remote host via SFTP
+-- Returns size of received data.
+sftpReceiveToHandle :: Sftp      -- ^ Opened sftp session
+                    -> FilePath  -- ^ Path to remote file
+                    -> Handle    -- ^ Open handle to write to
+                    -> IO Integer
+sftpReceiveToHandle sftp remote fh = do
+  result <- withOpenSftpFile sftp remote 0 [FXF_READ] $ \sftph -> do
+    fstat <- sftpFstat sftph
+    sftpReadFileToHandler sftph fh (fromIntegral $ saFileSize fstat)
+  return $ fromIntegral result
+
+withOpenSftpFile :: Sftp
+                 -> FilePath
+                 -> Int
+                 -> [SftpFileTransferFlags]
+                 -> (SftpHandle -> IO a)
+                 -> IO a
+withOpenSftpFile sftp path mode flags =
+  E.bracket (sftpOpenFile sftp path mode flags) sftpCloseHandle
