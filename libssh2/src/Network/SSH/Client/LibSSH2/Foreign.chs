@@ -60,16 +60,18 @@ import Foreign
 import Foreign.C.Types
 import Foreign.C.String
 import System.IO
-import Network.Socket (Socket(MkSocket), fdSocket)
+import Network.Socket (Socket(MkSocket), isReadable)
 import Data.Time.Clock.POSIX
-import System.Posix.IO.Select
-import System.Posix.IO.Select.Types
+import Data.Coerce
+import System.Posix.IO
 import System.Posix.Types
 import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Unsafe as BSS
 
 import Network.SSH.Client.LibSSH2.Types
 import Network.SSH.Client.LibSSH2.Errors
+
+
 #ifdef GCRYPT
 import Network.SSH.Client.LibSSH2.GCrypt
 #endif
@@ -519,7 +521,7 @@ pollChannelRead ch = do
   mbSocket <- sessionGetSocket (channelSession ch)
   case mbSocket of
     Nothing -> error "pollChannelRead without socket present"
-    Just socket -> (== 1) <$> select'' [Fd $ fdSocket socket] [] [] (finite 0 100)
+    Just socket -> isReadable socket
 
 --
 -- | Sftp support
