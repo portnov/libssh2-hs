@@ -60,13 +60,15 @@ import Foreign
 import Foreign.C.Types
 import Foreign.C.String
 import System.IO
-import Network.Socket (Socket(MkSocket))
+import Network.Socket (Socket(MkSocket), fdSocket)
 import Data.Time.Clock.POSIX
+import System.Posix.IO.Select
+import System.Posix.IO.Select.Types
+import System.Posix.Types
 import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Unsafe as BSS
 
 import Network.SSH.Client.LibSSH2.Types
-import Network.SSH.Client.LibSSH2.WaitSocket
 import Network.SSH.Client.LibSSH2.Errors
 #ifdef GCRYPT
 import Network.SSH.Client.LibSSH2.GCrypt
@@ -512,12 +514,12 @@ scpReceiveChannel s path = do
 -- {# fun poll_channel_read as pollChannelRead_
 --     { toPointer `Channel' } -> `Int' #}
 
-pollChannelRead :: Channel -> IO ()
+pollChannelRead :: Channel -> IO Bool
 pollChannelRead ch = do
   mbSocket <- sessionGetSocket (channelSession ch)
   case mbSocket of
     Nothing -> error "pollChannelRead without socket present"
-    Just socket -> threadWaitRead socket
+    Just socket -> (== 1) <$> select'' [Fd $ fdSocket socket] [] [] (finite 0 100)
 
 --
 -- | Sftp support

@@ -154,8 +154,10 @@ readAllChannelNonBlocking ch = go []
   where
     go :: [BSS.ByteString] -> IO BSL.ByteString
     go acc = do
-      bs <- do pollChannelRead ch
-               readChannel ch 0x400
+      bs <- do isReadable <- pollChannelRead ch
+               if isReadable
+                 then readChannel ch 0x400
+                 else return BSS.empty
       if BSS.length bs > 0
         then go (bs : acc)
         else return (BSL.fromChunks $ reverse acc)
