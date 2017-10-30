@@ -56,12 +56,13 @@ module Network.SSH.Client.LibSSH2.Foreign
    TraceFlag (..), setTraceMode
   ) where
 
-import Foreign
+import Control.Monad (void)
+import Data.Time.Clock.POSIX
+import Foreign hiding (void)
 import Foreign.C.Types
 import Foreign.C.String
 import System.IO
 import Network.Socket (Socket(MkSocket), fdSocket)
-import Data.Time.Clock.POSIX
 import System.Posix.IO.Select
 import System.Posix.IO.Select.Types
 import System.Posix.Types
@@ -719,6 +720,7 @@ sftpFstat sftph = do
        {# call sftp_fstat_ex #} (toPointer sftph) sftpattrptr 0
     parseSftpAttributes sftpattrptr
 
+parseSftpAttributes :: Ptr a -> IO SftpAttributes -- TODO why not storable?
 parseSftpAttributes sftpattrptr = do
     flags<- {# get _LIBSSH2_SFTP_ATTRIBUTES->flags #} sftpattrptr
     size <- {# get _LIBSSH2_SFTP_ATTRIBUTES->filesize #} sftpattrptr

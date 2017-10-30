@@ -51,7 +51,7 @@ import Network.SSH.Client.LibSSH2.Foreign
 socketConnect :: String -> Int -> IO Socket
 socketConnect hostname port = do
     proto <- getProtocolNumber "tcp"
-    bracketOnError (socket AF_INET Stream proto) (sClose)
+    bracketOnError (socket AF_INET Stream proto) (close)
             (\sock -> do
               he <- getHostByName hostname
               connect sock (SockAddrInet (fromIntegral port) (hostAddress he))
@@ -154,8 +154,8 @@ readAllChannelNonBlocking ch = go []
   where
     go :: [BSS.ByteString] -> IO BSL.ByteString
     go acc = do
-      bs <- do isReadable <- pollChannelRead ch
-               if isReadable
+      bs <- do readable <- pollChannelRead ch
+               if readable
                  then readChannel ch 0x400
                  else return BSS.empty
       if BSS.length bs > 0

@@ -40,7 +40,6 @@ module Network.SSH.Client.LibSSH2.Types
   ) where
 
 import Foreign
-import Foreign.C.Types
 import Foreign.C.String
 import Data.Generics
 import Data.IORef
