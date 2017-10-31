@@ -63,10 +63,6 @@ import Foreign.C.Types
 import Foreign.C.String
 import System.IO
 import Network.Socket (Socket(MkSocket), isReadable)
-import Data.Time.Clock.POSIX
-import Data.Coerce
-import System.Posix.IO
-import System.Posix.Types
 import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Unsafe as BSS
 
