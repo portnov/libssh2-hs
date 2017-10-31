@@ -37,7 +37,6 @@ import Control.Exception
 import Data.Generics
 import Foreign
 import Foreign.C.Types
-import Control.Monad (when)
 
 import Network.SSH.Client.LibSSH2.Types
 import Network.SSH.Client.LibSSH2.WaitSocket
