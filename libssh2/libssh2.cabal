@@ -87,3 +87,7 @@ Executable hs-ssh-client
     buildable: False
   Main-Is: ssh-client.hs
   GHC-Options: -threaded
+
+Source-repository head
+  type: git
+  location: https://github.com/portnov/libssh2-hs

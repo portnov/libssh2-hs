@@ -1,15 +1,18 @@
 {-# LANGUAGE BangPatterns #-}
 
 import Control.Monad
-import Control.Monad.Trans.Resource
 import Control.Concurrent.STM
 import Data.Conduit
-import Data.Conduit.Lazy
+import qualified Data.Conduit.Combinators as C
+import qualified Data.Conduit.List as CL
 import System.Environment
 import System.FilePath
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
+import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 import Codec.Binary.UTF8.String
+import System.IO
 
 import Network.SSH.Client.LibSSH2.Foreign
 import Network.SSH.Client.LibSSH2.Conduit
@@ -31,8 +34,8 @@ ssh login host port command = do
     r <- checkHost session host port known_hosts
     publicKeyAuthFile session login public private ""
     (Just ch, !src) <- execCommand True session command
-    res <- runResourceT $ returnStrict =<< lazyConsume src
-    forM res C8.putStrLn
+    hSetBuffering stdout NoBuffering
+    src =$= C.decodeUtf8 =$= C.linesUnbounded $$ CL.mapM_ TIO.putStrLn
     rc <- getReturnCode ch
     putStrLn $ "Exit code: " ++ show rc
   exit

@@ -9,14 +9,10 @@ module Network.SSH.Client.LibSSH2.Conduit
 import Control.Monad
 import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.Resource
-import Control.Monad.Trans.Control
 import Control.Concurrent.STM
 import Data.Monoid
 import Data.Conduit
 import qualified Data.Conduit.List as L
-import Data.Conduit.Lazy
-import qualified Data.Conduit.Binary as Binary
 import qualified Data.ByteString as B
 
 import Network.SSH.Client.LibSSH2.Foreign
@@ -46,7 +42,7 @@ execCommand :: MonadIO m
             -> IO (Maybe CommandsHandle, Source m B.ByteString) 
 execCommand b s cmd = do
   (ch, channel) <- initCH b s
-  let src = execCommandSrc ch channel cmd $= Binary.lines
+  let src = execCommandSrc ch channel cmd
   return (if b then Just ch else Nothing, src)
 
 -- | Handles channel opening and closing.
@@ -96,10 +92,8 @@ getReturnCode ch = do
                    return rc
     
 execCommandSrc :: MonadIO m => CommandsHandle -> Channel -> String -> Source m B.ByteString
-execCommandSrc var channel command = src $= (L.consume >>= mapM_ yield)
-                                     
+execCommandSrc var channel command = src
   where
-    
     src = do
       liftIO $ channelExecute channel command
       pullAnswer channel
