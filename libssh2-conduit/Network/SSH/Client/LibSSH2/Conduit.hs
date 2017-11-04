@@ -8,11 +8,8 @@ module Network.SSH.Client.LibSSH2.Conduit
 
 import Control.Monad
 import Control.Monad.IO.Class (MonadIO (..))
-import Control.Monad.Trans.Class (lift)
 import Control.Concurrent.STM
-import Data.Monoid
 import Data.Conduit
-import qualified Data.Conduit.List as L
 import qualified Data.ByteString as B
 
 import Network.SSH.Client.LibSSH2.Foreign

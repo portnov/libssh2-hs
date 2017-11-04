@@ -33,6 +33,7 @@ flag example-client
 
 Library
   Exposed-modules:     Network.SSH.Client.LibSSH2.Conduit
+  GHC-Options: -fwarn-unused-imports
 
   Build-depends:       base >= 4 && <5,
                        bytestring >= 0.10,
@@ -58,7 +59,7 @@ Executable hs-ssh-client
     buildable: False
   Main-Is: ssh-client.hs
   Other-modules:     Network.SSH.Client.LibSSH2.Conduit
-  GHC-Options: -threaded
+  GHC-Options: -threaded -fwarn-unused-imports
 
 Source-repository head
   type: git

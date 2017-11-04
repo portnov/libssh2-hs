@@ -1,17 +1,11 @@
 {-# LANGUAGE BangPatterns #-}
 
-import Control.Monad
-import Control.Concurrent.STM
 import Data.Conduit
 import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit.List as CL
 import System.Environment
 import System.FilePath
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as C8
-import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import Codec.Binary.UTF8.String
 import System.IO
 
 import Network.SSH.Client.LibSSH2.Foreign
