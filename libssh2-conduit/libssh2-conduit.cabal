@@ -47,7 +47,7 @@ Library
 
 Executable hs-ssh-client
   if flag(example-client)
-    Build-depends: base, utf8-string, libssh2 >= 0.2,
+    Build-depends: base, utf8-string, libssh2 >= 0.2.0.5,
                    stm >= 2.4,
                    transformers,
                    libssh2-conduit >= 0.2.1,
