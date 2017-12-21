@@ -12,7 +12,7 @@ main = do
     ["command", user, host, port, cmd]  -> runCommand user host (read port) cmd
     ["send", user, host, port, path]    -> sendFile user host (read port) path
     ["receive", user, host, port, path] -> receiveFile user host (read port) path
-    _ -> putStrLn "Synopsis: ssh-client USERNAME HOSTNAME PORT COMMAND"
+    _ -> putStrLn "Synopsis: ssh-client ACTION USERNAME HOSTNAME PORT ARG"
 
 runCommand login host port command =
   ssh login host port $ \s -> 
