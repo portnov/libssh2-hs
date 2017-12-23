@@ -22,6 +22,7 @@ module Network.SSH.Client.LibSSH2.Errors
    IntResult (..),
 
    -- * Functions
+   getLastErrno,
    getLastError,
    getLastSftpError,
    handleInt,
@@ -94,6 +95,13 @@ data ErrorCode =
 
 instance Exception ErrorCode
 
+data SessionError = SessionError {
+  code :: ErrorCode,
+  msg :: String }
+  deriving (Show)
+
+instance Exception SessionError
+
 error2int :: (Num i) => ErrorCode -> i
 error2int = fromIntegral . negate . fromEnum
 
@@ -131,6 +139,9 @@ instance IntResult CLong where
 instance IntResult CLLong where
   intResult = fromIntegral
 
+{# fun session_last_errno as getLastErrno
+  { toPointer `Session' } -> `Int' #}
+
 {# fun session_last_error as getLastError_
   { toPointer `Session',
     alloca- `String' peekCStringPtr*,
@@ -138,8 +149,10 @@ instance IntResult CLLong where
     `Int' } -> `Int' #}
 
 -- | Get last error information.
-getLastError :: Session -> IO (Int, String)
-getLastError s = getLastError_ s nullPtr 0
+getLastError :: Session -> IO (ErrorCode, String)
+getLastError s = do
+  (r, m) <- getLastError_ s nullPtr 0
+  return (int2error r, m)
 
 -- | Throw an exception if negative value passed,
 -- or return unchanged value.
@@ -172,7 +185,7 @@ handleNullPtr m_ctx fromPointer io = do
       Nothing  -> throw NULL_POINTER
       Just ctx -> do
         let session = getSession ctx
-        (r, _) <- getLastError session
+        r <- getLastErrno session
         case int2error r of
           EAGAIN -> threadWaitSession (Just session) >> handleNullPtr m_ctx fromPointer io
           err    -> throwCtxSpecificError ctx err
@@ -245,7 +258,9 @@ class SshCtx a where
 
 instance SshCtx Session where
   getSession = id
-  throwCtxSpecificError _ er = throw er
+  throwCtxSpecificError ctx er = do
+    (r, s) <- getLastError $ getSession ctx
+    throw $ SessionError (assert (r == er) er) s
 
 instance SshCtx Sftp where
   getSession = sftpSession
