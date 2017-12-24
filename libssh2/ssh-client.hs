@@ -15,18 +15,18 @@ main = do
     _ -> putStrLn "Synopsis: ssh-client USERNAME HOSTNAME PORT COMMAND"
 
 runCommand login host port command =
-  ssh login host port $ \s -> 
+  ssh login host port $ \s ->
     withChannel s $ \ch -> do
       channelExecute ch command
       result <- readAllChannel ch
       BSL.putStr result
 
-sendFile login host port path = 
+sendFile login host port path =
   ssh login host port $ \s -> do
     sz <- scpSendFile s 0o644 path (takeFileName path)
     putStrLn $ "Sent: " ++ show sz ++ " bytes."
 
-receiveFile login host port path = 
+receiveFile login host port path =
   ssh login host port $ \s -> do
     sz <- scpReceiveFile s (takeFileName path) path
     putStrLn $ "Received: " ++ show sz ++ " bytes."

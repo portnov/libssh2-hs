@@ -1,9 +1,9 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface #-}
 
-#ifdef __APPLE__ 
+#ifdef __APPLE__
 #define _ANSI_SOURCE
 #define __OSX_AVAILABLE_STARTING(_mac, _iphone)
-#define __OSX_AVAILABLE_BUT_DEPRECATED(_macIntro, _macDep, _iphoneIntro, _iphoneDep) 
+#define __OSX_AVAILABLE_BUT_DEPRECATED(_macIntro, _macDep, _iphoneIntro, _iphoneDep)
 #endif
 
 #include "libssh2_local.h"
@@ -21,7 +21,7 @@ module Network.SSH.Client.LibSSH2.Foreign
    initSession, freeSession, disconnectSession,
    handshake,
    setBlocking,
-   
+
    -- * Known hosts functions
    initKnownHosts, freeKnownHosts, knownHostsReadFile,
    getHostKey, checkKnownHost,
@@ -129,7 +129,7 @@ init_crypto :: Bool -> CInt
 init_crypto False = 1
 init_crypto True  = 0
 
-ssh2socket :: Socket 
+ssh2socket :: Socket
 #ifdef mingw32_HOST_OS
     #ifdef x86_64_HOST_ARCH
            -> CULLong
@@ -168,7 +168,7 @@ foreign import ccall safe "libssh2_exit"
 
 -- | Create Session object
 initSession :: IO Session
-initSession = handleNullPtr (Nothing :: Maybe Session) sessionFromPointer $ 
+initSession = handleNullPtr (Nothing :: Maybe Session) sessionFromPointer $
   {# call session_init_ex #} nullFunPtr nullFunPtr nullFunPtr nullPtr
 
 {# fun session_free as freeSession_
@@ -184,7 +184,7 @@ freeSession session = void . handleInt (Just session) $ freeSession_ session
 -- | Disconnect session (but do not free memory)
 disconnectSession :: Session
                   -> String  -- ^ Goodbye message
-                  -> IO () 
+                  -> IO ()
 disconnectSession s msg = void . handleInt (Just s) $ disconnectSessionEx s 11 msg ""
 
 {# fun session_set_blocking as setBlocking
@@ -237,7 +237,7 @@ knownHostsReadFile kh path = handleInt (Nothing :: Maybe Session) $ knownHostsRe
     castPtr `Ptr ()' } -> `KnownHostResult' int2khresult #}
 
 -- | Check host data against known hosts.
-checkKnownHost :: KnownHosts         -- 
+checkKnownHost :: KnownHosts         --
                -> String             -- ^ Host name
                -> Int                -- ^ Port number (usually 22)
                -> String             -- ^ Host public key
@@ -260,7 +260,7 @@ publicKeyAuthFile :: Session -- ^ Session
                   -> String  -- ^ Path to private key
                   -> String  -- ^ Passphrase
                   -> IO ()
-publicKeyAuthFile session username public private passphrase = void . handleInt (Just session) $ 
+publicKeyAuthFile session username public private passphrase = void . handleInt (Just session) $
   publicKeyAuthFile_ session username public private passphrase
 
 -- | Perform username/password authentication.
@@ -282,24 +282,24 @@ usernamePasswordAuth session username password =
 
 -- | Open a channel for session.
 openChannelSession :: Session -> IO Channel
-openChannelSession s = handleNullPtr (Just s) (channelFromPointer s) $ 
+openChannelSession s = handleNullPtr (Just s) (channelFromPointer s) $
   openSessionChannelEx s "session" 65536 32768 ""
 
-channelProcess :: Channel -> String -> String -> IO () 
+channelProcess :: Channel -> String -> String -> IO ()
 channelProcess ch kind command = void . handleInt (Just $ channelSession ch) $
   channelProcessStartup_ ch kind command
 
 -- | Execute command
-channelExecute :: Channel -> String -> IO () 
+channelExecute :: Channel -> String -> IO ()
 channelExecute c command = channelProcess c "exec" command
 
-{# fun channel_process_startup as channelProcessStartup_ 
+{# fun channel_process_startup as channelProcessStartup_
   { toPointer `Channel',
     `String' &,
     `String' & } -> `Int' #}
 
 -- | Execute shell command
-channelShell :: Channel -> IO () 
+channelShell :: Channel -> IO ()
 channelShell c = void . handleInt (Just $ channelSession c) $ do
   withCStringLen "shell" $ \(s,l) -> do
     res <- channelProcessStartup_'_ (toPointer c) s (fromIntegral l) nullPtr 0
@@ -312,34 +312,34 @@ channelShell c = void . handleInt (Just $ channelSession c) $ do
     `Int', `Int',
     `Int', `Int' } -> `Int' #}
 
-requestPTY :: Channel -> String -> IO () 
+requestPTY :: Channel -> String -> IO ()
 requestPTY ch term = void . handleInt (Just $ channelSession ch) $ requestPTYEx ch term "" 0 0 0 0
 
-readChannelEx :: Channel -> Int -> Size -> IO BSS.ByteString 
+readChannelEx :: Channel -> Int -> Size -> IO BSS.ByteString
 readChannelEx ch i size = do
   allocaBytes (fromIntegral size) $ \buffer -> do
     rc <- handleInt (Just $ channelSession ch) $ {# call channel_read_ex #} (toPointer ch) (fromIntegral i) buffer size
     BSS.packCStringLen (buffer, fromIntegral rc)
 
 -- | Read data from channel.
-readChannel :: Channel         -- 
+readChannel :: Channel         --
             -> Size             -- ^ Amount of data to read
-            -> IO BSS.ByteString 
+            -> IO BSS.ByteString
 readChannel c sz = readChannelEx c 0 sz
 
 -- | Write data to channel.
-writeChannel :: Channel -> BSS.ByteString -> IO () 
-writeChannel ch bs = 
+writeChannel :: Channel -> BSS.ByteString -> IO ()
+writeChannel ch bs =
     BSS.unsafeUseAsCString bs $ go 0 (fromIntegral $ BSS.length bs)
   where
-    go :: Int -> CULong -> CString -> IO () 
+    go :: Int -> CULong -> CString -> IO ()
     go offset len cstr = do
-      written <- handleInt (Just $ channelSession ch) 
-                           $ {# call channel_write_ex #} (toPointer ch) 
-                                                         0 
-                                                         (cstr `plusPtr` offset) 
+      written <- handleInt (Just $ channelSession ch)
+                           $ {# call channel_write_ex #} (toPointer ch)
+                                                         0
+                                                         (cstr `plusPtr` offset)
                                                          (fromIntegral len)
-      if fromIntegral written < len 
+      if fromIntegral written < len
         then go (offset + fromIntegral written) (len - fromIntegral written) cstr
         else return ()
 
@@ -387,21 +387,21 @@ trace2int flags = foldr (.|.) 0 (map tf2int flags)
 -- | Write all data to channel from handle.
 -- Returns amount of transferred data.
 writeChannelFromHandle :: Channel -> Handle -> IO Integer
-writeChannelFromHandle ch h = 
+writeChannelFromHandle ch h =
   let
     go :: Integer -> Ptr a -> IO Integer
     go done buffer = do
       sz <- hGetBuf h buffer bufferSize
       send 0 (fromIntegral sz) buffer
-      let newDone = done + fromIntegral sz 
+      let newDone = done + fromIntegral sz
       if sz < bufferSize
-        then return newDone 
+        then return newDone
         else go newDone buffer
- 
-    send :: Int -> CLong -> Ptr a -> IO () 
-    send _ 0 _ = return () 
+
+    send :: Int -> CLong -> Ptr a -> IO ()
+    send _ 0 _ = return ()
     send written size buffer = do
-      sent <- handleInt (Just $ channelSession ch) $ 
+      sent <- handleInt (Just $ channelSession ch) $
                 {# call channel_write_ex #}
                   (toPointer ch)
                   0
@@ -411,7 +411,7 @@ writeChannelFromHandle ch h =
 
     bufferSize = 0x100000
 
-  in allocaBytes bufferSize $ go 0 
+  in allocaBytes bufferSize $ go 0
 
 -- | Read all data from channel to handle.
 -- Returns amount of transferred data.
@@ -429,7 +429,7 @@ readChannelCB :: Channel -> CString -> Int -> Offset -> (CString -> Int -> IO ()
 readChannelCB ch buffer bufferSize fileSize callback =
   let go got = do
         let toRead = min (fromIntegral fileSize - got) (fromIntegral bufferSize)
-        sz <- handleInt (Just $ channelSession ch) $ 
+        sz <- handleInt (Just $ channelSession ch) $
                 {# call channel_read_ex #}
                   (toPointer ch)
                   0
@@ -493,7 +493,7 @@ channelExitSignal ch = handleInt (Just $ channelSession ch) $ channelExitSignal_
 
 -- | Create SCP file send channel.
 scpSendChannel :: Session -> String -> Int -> Int64 -> POSIXTime -> POSIXTime -> IO Channel
-scpSendChannel session remotePath mode size mtime atime = handleNullPtr (Just session) (channelFromPointer session) $ 
+scpSendChannel session remotePath mode size mtime atime = handleNullPtr (Just session) (channelFromPointer session) $
   scpSendChannel_ session remotePath mode size mtime atime
 
 type Offset = {# type off_t #}
