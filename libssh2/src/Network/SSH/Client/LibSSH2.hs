@@ -113,6 +113,7 @@ sessionInit hostname port = do
 sessionClose :: Session -> IO ()
 sessionClose session = do
       disconnectSession session "Done."
+      sessionGetSocket session >>= maybe (pure ()) close
       freeSession session
 
 
