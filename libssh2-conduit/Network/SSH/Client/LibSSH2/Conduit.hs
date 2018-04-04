@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Network.SSH.Client.LibSSH2.Conduit
   (sourceChannel,
+   sinkChannel,
    CommandsHandle,
    execCommand,
    getReturnCode
@@ -8,6 +9,7 @@ module Network.SSH.Client.LibSSH2.Conduit
 
 import Control.Monad
 import Control.Monad.IO.Class (MonadIO (..))
+import Control.Monad.Trans.Class (lift)
 import Control.Concurrent.STM
 import Data.Conduit
 import qualified Data.ByteString as B
@@ -26,6 +28,13 @@ sourceChannel ch = src
              yield res
              src
         else return ()
+
+-- | Stream data to @Channel@.
+sinkChannel :: MonadIO m => Channel -> Sink B.ByteString m ()
+sinkChannel channel =
+    loop
+  where
+    loop = await >>= maybe (return ()) (\bs -> lift (liftIO $ writeChannel channel bs) >> loop)
 
 -- | Execute one command and read it's output lazily.
 -- If first argument is True, then you *must* get return code
