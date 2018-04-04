@@ -17,7 +17,7 @@ import qualified Data.ByteString as B
 import Network.SSH.Client.LibSSH2.Foreign
 import Network.SSH.Client.LibSSH2
 
--- | Read all contents of libssh2's Channel.
+-- | Stream data from @Channel@.
 sourceChannel :: MonadIO m => Channel -> Source m B.ByteString
 sourceChannel ch = src
   where
