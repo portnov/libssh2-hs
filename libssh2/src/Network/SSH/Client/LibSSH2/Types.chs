@@ -17,6 +17,8 @@ module Network.SSH.Client.LibSSH2.Types
    Channel,
    Sftp,
    SftpHandle,
+   Agent,
+   AgentPublicKey,
    ToPointer (..),
    Direction (..),
    int2dir,
@@ -35,11 +37,14 @@ module Network.SSH.Client.LibSSH2.Types
    sftpSession,
    sftpHandlePtr,
    sftpHandleFromPointer,
-   sftpHandleSession
+   sftpHandleSession,
+   agentFromPointer,
+   agentSession,
+   agentPublicKeyFromPointer,
+   withAgentPublicKey
   ) where
 
 import Foreign
-import Foreign.C.Types
 import Foreign.C.String
 import Data.Generics
 import Data.IORef
@@ -64,6 +69,7 @@ peekMaybeCStringPtr ptr = do
   if strPtr == nullPtr
     then return Nothing
     else Just `fmap` peekCAString strPtr
+
 
 class ToPointer p where
   toPointer :: p -> Ptr ()
@@ -172,3 +178,35 @@ instance Show SftpHandle where
 
 instance ToPointer SftpHandle where
   toPointer = castPtr . sftpHandlePtr
+
+
+--
+-- | Agent support
+--
+
+agentFromPointer :: Session -> Ptr () -> IO Agent
+agentFromPointer session ptr = return $ Agent (castPtr ptr) session
+
+{# pointer *AGENT as CAgent #}
+
+data Agent = Agent { agentPtr :: CAgent, agentSession :: Session }
+
+instance Show Agent where
+  show agent = "<libssh2 agent: " ++ show (agentPtr agent) ++ ">"
+
+instance ToPointer Agent where
+  toPointer = castPtr . agentPtr
+
+{# pointer *agent_publickey as AgentPublicKey foreign newtype #}
+
+agentPublicKeyFromPointer :: Ptr () -> IO AgentPublicKey
+agentPublicKeyFromPointer ptr = do
+  newPtr <- newForeignPtr_ ptr
+  return $ AgentPublicKey $ castForeignPtr newPtr
+
+deriving instance Eq AgentPublicKey
+deriving instance Data AgentPublicKey
+deriving instance Typeable AgentPublicKey
+
+instance Show AgentPublicKey where
+  show (AgentPublicKey p) = "<libssh2 agent publickey: " ++ show p ++ ">"

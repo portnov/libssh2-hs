@@ -51,10 +51,24 @@ module Network.SSH.Client.LibSSH2.Foreign
    RenameFlag (..), SftpFileTransferFlags (..),
    SftpAttributes (..),
 
+   -- * SSH Agent functions
+   Agent (..), AgentPublicKey,
+   agentInit,
+   agentConnect, agentDisconnect,
+   agentListIdentities,
+   agentGetIdentity,
+   agentGetIdentities,
+   agentFree,
+   agentPublicKeyComment,
+   agentPublicKeyBlob,
+   agentUserAuth,
+   agentAuthenticate,
+
    -- * Debug
    TraceFlag (..), setTraceMode
   ) where
 
+import Control.Exception (throw, tryJust)
 import Control.Monad (void)
 import Data.Time.Clock.POSIX
 import Foreign hiding (void)
@@ -738,3 +752,134 @@ sftpDeleteFile sftp path = do
   withCStringLen path $ \(str,len) -> do
     void . handleInt (Just sftp) $
       {# call sftp_unlink_ex #} (toPointer sftp) str (toEnum len)
+
+
+--
+-- | Agent support
+--
+
+-- | Initialize a new ssh agent handle.
+agentInit :: Session -> IO Agent
+agentInit s = handleNullPtr (Just s) (agentFromPointer s) $ agentInit_ s
+
+{# fun agent_init as agentInit_ { toPointer `Session' } -> `Ptr ()' id #}
+
+{# fun agent_free as agentFree
+  { toPointer `Agent' } -> `()' #}
+
+-- | Attempt to establish a connection to an ssh agent process.
+-- | The environment variable @SSH_AUTH_SOCK@ is used to determine where to connect on unix.
+agentConnect :: Agent -> IO ()
+agentConnect agent = void . handleInt (Just agent) $ agentConnect_ agent
+
+{# fun agent_connect as agentConnect_ { toPointer `Agent' } -> `Int' #}
+
+-- | Get or update the list of known identities. Must be called at least once.
+agentListIdentities :: Agent -> IO ()
+agentListIdentities agent = void . handleInt (Just agent) $ agentListIdentities_ agent
+
+{# fun agent_list_identities as agentListIdentities_ { toPointer `Agent' } -> `Int' #}
+
+-- | Cleans up a connection to an ssh agent.
+agentDisconnect :: Agent -> IO ()
+agentDisconnect agent = void . handleInt (Just agent) $ agentDisconnect_ agent
+
+{# fun agent_disconnect as agentDisconnect_ { toPointer `Agent' } -> `Int' #}
+
+-- | Copies all the keys from the agent to the local process.
+agentGetIdentities :: Agent -> IO [AgentPublicKey]
+agentGetIdentities agent = agentGetIdentities_ agent []
+  where
+    agentGetIdentities_ :: Agent -> [AgentPublicKey] -> IO [AgentPublicKey]
+    agentGetIdentities_ agent' acc@[] = do
+      k <- agentGetIdentity agent' Nothing
+      case k of
+        Just aKey -> agentGetIdentities_ agent' [aKey]
+        Nothing -> return acc
+    agentGetIdentities_ agent' acc = do
+      k <- agentGetIdentity agent' $ Just $ head acc
+      case k of
+        Just aKey -> agentGetIdentities_ agent' (aKey:acc)
+        Nothing -> return acc
+
+agentNullPublicKey :: IO AgentPublicKey
+agentNullPublicKey = agentPublicKeyFromPointer nullPtr
+
+-- | Copies one identity from the agent to the local process.
+agentGetIdentity :: Agent                     -- ^ Agent handle.
+                 -> Maybe AgentPublicKey      -- ^ Previous key returned.
+                 -> IO (Maybe AgentPublicKey)
+agentGetIdentity agent Nothing = do
+  nullKey <- agentNullPublicKey
+  agentGetIdentity agent (Just nullKey)
+agentGetIdentity agent (Just key) = do
+  agentGetIdentity_ agent key
+
+agentGetIdentity_ :: Agent -> AgentPublicKey -> IO (Maybe AgentPublicKey)
+agentGetIdentity_ a pk = do
+  withAgentPublicKey pk $ \pkPtr -> do
+    alloca $ \ptr -> do
+      (res, pptr) <- with ptr $ \pkStore -> do
+                x <- {# call agent_get_identity #} (toPointer a) pkStore (castPtr pkPtr)
+                pptr <- peek pkStore
+                return (x, pptr)
+      void $ handleInt (Just a) (return res)
+      if res == 0
+        then do
+          resPkPtr <- agentPublicKeyFromPointer pptr
+          return $ Just resPkPtr
+        else return Nothing
+
+-- | Return the comment from the given agent public key.
+agentPublicKeyComment :: AgentPublicKey -> IO BSS.ByteString
+agentPublicKeyComment pk = do
+  withAgentPublicKey pk $ \pkPtr -> do
+    c <- {# get struct agent_publickey->comment #} pkPtr
+    BSS.packCString c
+
+-- | Return the bytes of the given agent public key.
+agentPublicKeyBlob :: AgentPublicKey -> IO BSS.ByteString
+agentPublicKeyBlob pk = do
+  withAgentPublicKey pk $ \pkPtr -> do
+    blobPtr <- {# get struct agent_publickey->blob #} pkPtr
+    blobLen <- {# get struct agent_publickey->blob_len #} pkPtr
+    BSS.packCStringLen (castPtr blobPtr, fromEnum blobLen)
+
+-- | Perform agent based public key authentication.
+-- You almost certainly want @agentAuthenticate instead of this, since this
+-- only does one round of authentication with the agent.
+agentUserAuth :: Agent          -- ^ Agent handle.
+              -> String         -- ^ Username to authenticate with.
+              -> AgentPublicKey -- ^ Public key to use from the agent.
+              -> IO ()
+agentUserAuth agent username key = void . handleInt (Just agent) $ agentUserAuth_ agent username key
+
+{# fun agent_userauth as agentUserAuth_ { toPointer `Agent'
+                                        , `String'
+                                        , withAgentPublicKeyVoidPtr* `AgentPublicKey'
+                                        } -> `Int' #}
+
+-- | Authenticate with an ssh agent.
+-- Takes a user and an agent and tries each key from the agent in succession.
+-- Throws AUTHENTICATION_FAILED if it's unable to authenticate.
+-- If you call this, you need to call @agentListIdentities at least once.
+agentAuthenticate :: String -- ^ Remote user name.
+                  -> Agent  -- ^ Connection to an agent.
+                  -> IO ()
+agentAuthenticate login agent = do
+  firstKey <- agentGetIdentity agent Nothing
+  agentAuthenticate' login agent firstKey
+  where
+      agentAuthenticate' _ _ Nothing = throw AUTHENTICATION_FAILED
+      agentAuthenticate' u a (Just k) = do
+          r <- tryJust isAuthenticationFailed (agentUserAuth a u k)
+          case r of
+              Left _ -> do
+                  nextKey <- agentGetIdentity a $ Just k
+                  agentAuthenticate' u a nextKey
+              Right _ -> return ()
+      isAuthenticationFailed AUTHENTICATION_FAILED = Just ()
+      isAuthenticationFailed _ = Nothing
+
+withAgentPublicKeyVoidPtr :: AgentPublicKey -> (Ptr () -> IO a) -> IO a
+withAgentPublicKeyVoidPtr p f = withAgentPublicKey p $ \pp -> f (castPtr pp)
