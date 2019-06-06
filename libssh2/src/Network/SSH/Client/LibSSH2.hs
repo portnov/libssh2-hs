@@ -21,6 +21,7 @@ module Network.SSH.Client.LibSSH2
    -- * Sftp Functions
    withSFTP,
    withSFTPUser,
+   withSftpSession,
    sftpListDir,
    sftpRenameFile,
    sftpSendFile, sftpSendFromHandle,
