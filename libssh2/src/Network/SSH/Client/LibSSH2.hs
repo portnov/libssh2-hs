@@ -36,8 +36,6 @@ module Network.SSH.Client.LibSSH2
 
 import Control.Monad
 import Control.Exception as E
-import Network  hiding (sClose)
-import Network.BSD
 import Network.Socket
 import System.IO
 import qualified Data.ByteString as BSS
@@ -50,12 +48,14 @@ import Network.SSH.Client.LibSSH2.Foreign
 -- | Similar to Network.connectTo, but does not socketToHandle.
 socketConnect :: String -> Int -> IO Socket
 socketConnect hostname port = do
-    proto <- getProtocolNumber "tcp"
-    bracketOnError (socket AF_INET Stream proto) (close)
-            (\sock -> do
-              he <- getHostByName hostname
-              connect sock (SockAddrInet (fromIntegral port) (hostAddress he))
-              return sock)
+  let hints = defaultHints { addrSocketType = Stream }
+  addr:_ <- getAddrInfo (Just hints) (Just hostname) (Just $ show port)
+  bracketOnError
+    (socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr))
+    (close)
+    (\sock -> do
+       connect sock $ addrAddress addr
+       return sock)
 
 -- | Execute some actions within SSH2 connection.
 -- Uses public key authentication.
