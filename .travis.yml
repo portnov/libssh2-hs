@@ -45,7 +45,7 @@ matrix:
       addons:
         homebrew:
           packages:
-            libssh2
+            - libssh2
 
 before_install:
 # Download and unpack the stack executable
