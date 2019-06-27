@@ -46,6 +46,7 @@ matrix:
         homebrew:
           update: true
           packages:
+            - openssl
             - libssh2
 
 before_install:
