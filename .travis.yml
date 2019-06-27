@@ -25,6 +25,8 @@ addons:
     packages:
       - libgmp-dev
       - libssh2-1-dev
+      - alex
+      - happy
 
 before_install:
 # Download and unpack the stack executable
