@@ -46,7 +46,7 @@ matrix:
         homebrew:
           update: true
           packages:
-            - openssl
+            # - openssl
             - libssh2
 
 before_install:
@@ -58,6 +58,7 @@ before_install:
   then
     travis_retry curl --insecure -L https://get.haskellstack.org/stable/osx-x86_64.tar.gz | tar xz --strip-components=1 --include '*/stack' -C ~/.local/bin
   else
+    export PKG_CONFIG_PATH="/usr/local/opt/openssl/lib/pkgconfig":$PKG_CONFIG_PATH
     travis_retry curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
   fi
 
