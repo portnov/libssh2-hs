@@ -82,7 +82,7 @@ Library
 
 Executable hs-ssh-client
   if flag(example-client)
-    Build-depends: base, utf8-string, syb, network, filepath, bytestring, time
+    Build-depends: base, utf8-string, syb, network, filepath, bytestring, time, libssh2
   else
     buildable: False
   Main-Is: ssh-client.hs

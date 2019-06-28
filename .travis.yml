@@ -33,6 +33,9 @@ matrix:
     - compiler: ": #stack default"
       env: ARGS=""
 
+    - compiler: ": #stack default with example client"
+      env: ARGS="--flag libssh2:example-client"
+
     - compiler: ": #stack 8.0.2"
       env: ARGS="--resolver lts-9"
 
