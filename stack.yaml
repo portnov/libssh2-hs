@@ -1,4 +1,4 @@
-resolver: lts-3.20
+resolver: lts-12.14
 packages:
   - libssh2/
   - libssh2-conduit/
@@ -7,3 +7,6 @@ flags:
   libssh2:
     example-client: false
     gcrypt: false
+
+  libssh2-conduit:
+    example-forwarder: false

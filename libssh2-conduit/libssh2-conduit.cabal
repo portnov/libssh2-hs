@@ -31,6 +31,10 @@ flag example-client
   description: Build the example client
   default: False
 
+flag example-forwarder
+  description: Build the example SSH forwarder
+  default: False
+
 Library
   Exposed-modules:     Network.SSH.Client.LibSSH2.Conduit
   GHC-Options: -fwarn-unused-imports
@@ -55,6 +59,24 @@ Executable hs-ssh-client
   else
     buildable: False
   Main-Is: ssh-client.hs
+  Other-modules:     Network.SSH.Client.LibSSH2.Conduit
+  GHC-Options: -threaded -fwarn-unused-imports
+
+Executable hs-ssh-forwarder
+  if flag(example-forwarder)
+    Build-depends: base, libssh2 >= 0.2.0.5,
+                   stm >= 2.4,
+                   transformers,
+                   libssh2-conduit >= 0.2.1,
+                   conduit >= 1.0.7,
+                   conduit-combinators >= 1.0.3,
+                   text >= 1.2.2.0,
+                   filepath, bytestring,
+                   async, network,
+                   conduit-extra
+  else
+    buildable: False
+  Main-Is: hs-ssh-forwarder.hs
   Other-modules:     Network.SSH.Client.LibSSH2.Conduit
   GHC-Options: -threaded -fwarn-unused-imports
 
