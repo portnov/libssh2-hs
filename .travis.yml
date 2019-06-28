@@ -30,9 +30,6 @@ addons:
 
 matrix:
   include:
-    - compiler: ": #stack default"
-      env: ARGS=""
-
     - compiler: ": #stack default with example executables"
       env: ARGS="" EXAMPLE=1
 
