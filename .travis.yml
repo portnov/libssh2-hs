@@ -33,8 +33,8 @@ matrix:
     - compiler: ": #stack default"
       env: ARGS=""
 
-    - compiler: ": #stack default with example client"
-      env: ARGS="--flag libssh2:example-client"
+    - compiler: ": #stack default with example executables"
+      env: ARGS="" EXAMPLE=1
 
     - compiler: ": #stack 8.0.2"
       env: ARGS="--resolver lts-9"
@@ -55,4 +55,8 @@ install:
 script:
 # Build the package, its tests, and its docs and run the tests
 - stack --no-terminal $ARGS test --haddock --no-haddock-deps
+- |
+  if [ x$EXAMPLE = x1 ]
+  then stack --no-terminal --flag libssh2:example-client build
+  fi
 
