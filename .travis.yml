@@ -54,6 +54,6 @@ script:
 - stack --no-terminal $ARGS test --haddock --no-haddock-deps
 - |
   if [ x$EXAMPLE = x1 ]
-  then stack --no-terminal --flag libssh2:example-client build
+  then stack --no-terminal build --flag libssh2:example-client 
   fi
 
