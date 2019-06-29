@@ -7,3 +7,6 @@ flags:
   libssh2:
     example-client: false
     gcrypt: false
+
+  libssh2-conduit:
+    example-forwarder: false

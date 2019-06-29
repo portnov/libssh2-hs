@@ -37,6 +37,7 @@ module Network.SSH.Client.LibSSH2.Foreign
    writeChannelFromHandle, readChannelToHandle,
    channelProcess, channelExecute, channelShell,
    requestPTY, requestPTYEx,
+   directTcpIpEx,
    channelExitStatus, channelExitSignal,
    scpSendChannel, scpReceiveChannel, pollChannelRead,
 
@@ -293,6 +294,16 @@ usernamePasswordAuth session username password =
    `String' &,
    `Int', `Int',
    `String' & } -> `Ptr ()' id #}
+
+{# fun channel_direct_tcpip_ex as directTcpIpEx_
+  { toPointer `Session',
+   `String',
+   `Int',
+   `String',
+   `Int' } -> `Ptr ()' id #}
+
+directTcpIpEx :: Session -> String -> Int -> String -> Int -> IO Channel
+directTcpIpEx s host port shost sport = handleNullPtr (Just s) (channelFromPointer s) $ directTcpIpEx_ s host port shost sport
 
 -- | Open a channel for session.
 openChannelSession :: Session -> IO Channel

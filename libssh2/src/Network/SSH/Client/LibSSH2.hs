@@ -18,6 +18,7 @@ module Network.SSH.Client.LibSSH2
    scpReceiveFile,
    runShellCommands,
    execCommands,
+   directTcpIpEx,
 
    -- * Sftp Functions
    withSFTP,

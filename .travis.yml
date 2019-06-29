@@ -80,6 +80,6 @@ script:
 
   stack --no-terminal $ARGS test --haddock --no-haddock-deps
   if [ x$EXAMPLE = x1 ]
-  then stack --no-terminal build --flag libssh2:example-client 
+  then stack --no-terminal build --flag libssh2:example-client --flag libssh2-conduit:example-forwarder
   fi
 
