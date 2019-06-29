@@ -58,6 +58,8 @@ before_install:
   then
     travis_retry curl --insecure -L https://get.haskellstack.org/stable/osx-x86_64.tar.gz | tar xz --strip-components=1 --include '*/stack' -C ~/.local/bin
   else
+    export LDFLAGS="-L/usr/local/opt/openssl/lib"
+    export CPPFLAGS="-I/usr/local/opt/openssl/include"
     export PKG_CONFIG_PATH="/usr/local/opt/openssl/lib/pkgconfig":$PKG_CONFIG_PATH
     travis_retry curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
   fi
@@ -68,5 +70,9 @@ install:
 
 script:
 # Build the package, its tests, and its docs and run the tests
-- stack --no-terminal $ARGS test --haddock --no-haddock-deps
+- |
+  export LDFLAGS="-L/usr/local/opt/openssl/lib"
+  export CPPFLAGS="-I/usr/local/opt/openssl/include"
+  export PKG_CONFIG_PATH="/usr/local/opt/openssl/lib/pkgconfig":$PKG_CONFIG_PATH
+  stack --no-terminal $ARGS test --haddock --no-haddock-deps
 
