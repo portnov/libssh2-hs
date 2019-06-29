@@ -39,11 +39,30 @@ matrix:
     - compiler: ": #stack 8.6.5"
       env: ARGS="--resolver lts-13"
 
+    - compiler: ": stack 8.6.5 osx"
+      env: ARGS="--resolver lts-13"
+      os: osx
+      addons:
+        homebrew:
+          update: true
+          packages:
+            # - openssl
+            - libssh2
+
 before_install:
 # Download and unpack the stack executable
 - mkdir -p ~/.local/bin
 - export PATH=$HOME/.local/bin:$PATH
-- travis_retry curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+- |
+  if [ `uname` = "Darwin" ]
+  then
+    travis_retry curl --insecure -L https://get.haskellstack.org/stable/osx-x86_64.tar.gz | tar xz --strip-components=1 --include '*/stack' -C ~/.local/bin
+  else
+    export LDFLAGS="-L/usr/local/opt/openssl/lib"
+    export CPPFLAGS="-I/usr/local/opt/openssl/include"
+    export PKG_CONFIG_PATH="/usr/local/opt/openssl/lib/pkgconfig":$PKG_CONFIG_PATH
+    travis_retry curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+  fi
 
 install:
 # Build dependencies
@@ -51,8 +70,15 @@ install:
 
 script:
 # Build the package, its tests, and its docs and run the tests
-- stack --no-terminal $ARGS test --haddock --no-haddock-deps
 - |
+  if [ `uname` = "Darwin" ]
+  then
+    export LDFLAGS="-L/usr/local/opt/openssl/lib"
+    export CPPFLAGS="-I/usr/local/opt/openssl/include"
+    export PKG_CONFIG_PATH="/usr/local/opt/openssl/lib/pkgconfig":$PKG_CONFIG_PATH
+  fi
+
+  stack --no-terminal $ARGS test --haddock --no-haddock-deps
   if [ x$EXAMPLE = x1 ]
   then stack --no-terminal build --flag libssh2:example-client 
   fi
