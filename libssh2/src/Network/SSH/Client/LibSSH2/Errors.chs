@@ -259,3 +259,7 @@ instance SshCtx SftpHandle where
 
   throwCtxSpecificError ctx =
     throwCtxSpecificError (sftpHandleSession ctx)
+
+instance SshCtx Agent where
+  getSession = getSession . agentSession
+  throwCtxSpecificError _ er = throw er

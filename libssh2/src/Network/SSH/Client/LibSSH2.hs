@@ -7,6 +7,7 @@ module Network.SSH.Client.LibSSH2
    -- * Functions
    withSSH2,
    withSSH2User,
+   withSSH2Agent,
    withSession,
    withChannel,
    withChannelBy,
@@ -21,6 +22,7 @@ module Network.SSH.Client.LibSSH2
    -- * Sftp Functions
    withSFTP,
    withSFTPUser,
+   withSftpSession,
    sftpListDir,
    sftpRenameFile,
    sftpSendFile, sftpSendFromHandle,
@@ -36,8 +38,6 @@ module Network.SSH.Client.LibSSH2
 
 import Control.Monad
 import Control.Exception as E
-import Network  hiding (sClose)
-import Network.BSD
 import Network.Socket
 import System.IO
 import qualified Data.ByteString as BSS
@@ -50,12 +50,14 @@ import Network.SSH.Client.LibSSH2.Foreign
 -- | Similar to Network.connectTo, but does not socketToHandle.
 socketConnect :: String -> Int -> IO Socket
 socketConnect hostname port = do
-    proto <- getProtocolNumber "tcp"
-    bracketOnError (socket AF_INET Stream proto) (close)
-            (\sock -> do
-              he <- getHostByName hostname
-              connect sock (SockAddrInet (fromIntegral port) (hostAddress he))
-              return sock)
+  let hints = defaultHints { addrSocketType = Stream }
+  addr:_ <- getAddrInfo (Just hints) (Just hostname) (Just $ show port)
+  bracketOnError
+    (socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr))
+    (close)
+    (\sock -> do
+       connect sock $ addrAddress addr
+       return sock)
 
 -- | Execute some actions within SSH2 connection.
 -- Uses public key authentication.
@@ -75,6 +77,27 @@ withSSH2 known_hosts public private passphrase login hostname port fn =
       error $ "Host key mismatch for host " ++ hostname
     publicKeyAuthFile s login public private passphrase
     fn s
+
+-- | Execute some actions within SSH2 connection.
+-- Uses agent based public key authentication.
+withSSH2Agent :: String            -- ^ Path to known_hosts file
+              -> String            -- ^ Remote user name
+              -> String            -- ^ Remote host name
+              -> Int               -- ^ Remote port number (usually 22)
+              -> (Session -> IO a) -- ^ Actions to perform on session
+              -> IO a
+withSSH2Agent known_hosts login hostname port fn =
+  withSession hostname port $ \s -> do
+    r <- checkHost s hostname port known_hosts
+    when (r == MISMATCH) $
+      error $ "host key mismatch for host " ++ hostname
+    E.bracket (agentInit s) agentFree $ \a ->
+      E.bracket_ (agentConnect a) (agentDisconnect a) (act s login a fn)
+    where
+      act s u a f = do
+          agentListIdentities a
+          agentAuthenticate u a
+          f s
 
 -- | Execute some actions within SSH2 connection.
 -- Uses username/password authentication.
