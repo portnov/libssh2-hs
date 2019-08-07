@@ -10,3 +10,6 @@ libssh2/Network/SSH/Client/LibSSH2/Types.hs
 libssh2/Network/SSH/Client/LibSSH2/Errors.hs
 ssh-client
 .stack-work/
+libssh2/.ghc.environment.*
+libssh2/dist
+libssh2/dist-*
