@@ -13,3 +13,6 @@ ssh-client
 libssh2/.ghc.environment.*
 libssh2/dist
 libssh2/dist-*
+libssh2-conduit/.ghc.environment.*
+libssh2-conduit/dist
+libssh2-conduit/dist-*
