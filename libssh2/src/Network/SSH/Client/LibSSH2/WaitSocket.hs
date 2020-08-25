@@ -11,7 +11,13 @@ module Network.SSH.Client.LibSSH2.WaitSocket
   , threadWaitWrite
   ) where
 
-import Network.Socket(Socket,fdSocket)
+import Network.Socket(Socket)
+#if MIN_VERSION_network(3,0,0)
+import Network.Socket(withFdSocket)
+#else
+import Network.Socket(fdSocket)
+#endif
+
 import System.Posix.Types(Fd(Fd))
 
 #ifdef mingw32_HOST_OS
@@ -26,10 +32,18 @@ import qualified GHC.Conc (threadWaitRead, threadWaitWrite)
 #endif
 
 threadWaitRead :: Socket -> IO ()
+#if MIN_VERSION_network(3,0,0)
+threadWaitRead = flip withFdSocket (threadWaitRead_ . Fd)
+#else
 threadWaitRead = threadWaitRead_ . Fd . fdSocket
+#endif
 
 threadWaitWrite :: Socket -> IO ()
+#if MIN_VERSION_network(3,0,0)
+threadWaitWrite = flip withFdSocket (threadWaitWrite_ . Fd)
+#else
 threadWaitWrite = threadWaitWrite_ . Fd . fdSocket
+#endif
 
 -- | Block the current thread until data is available to read on the
 -- given file descriptor (GHC only).

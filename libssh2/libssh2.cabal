@@ -61,7 +61,7 @@ Library
   Includes:            include/libssh2_local.h
 
   Build-depends:       base >= 4 && < 5,
-                       network >= 2.3 && < 3.0,
+                       network >= 2.3 && < 3.2,
                        syb >= 0.3.3, time >= 1.2,
                        bytestring >= 0.9,
                        unix

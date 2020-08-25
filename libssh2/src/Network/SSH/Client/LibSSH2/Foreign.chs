@@ -76,7 +76,7 @@ import Foreign hiding (void)
 import Foreign.C.Types
 import Foreign.C.String
 import System.IO
-import Network.Socket (Socket(MkSocket), isReadable)
+import Network.Socket (Socket, withFdSocket)
 import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Unsafe as BSS
 
@@ -149,16 +149,16 @@ ssh2socket :: Socket
     #ifdef x86_64_HOST_ARCH
            -> CULLong
     #else
-           -> CUInt
+           -> IO CUInt
     #endif
 #else
-           -> CInt
+           -> IO CInt
 #endif
-ssh2socket (MkSocket s _ _ _ _) =
+ssh2socket s =
 #ifdef mingw32_HOST_OS
-  (fromIntegral s)
+  fromIntegral <$> withFdSocket s pure
 #else
-  s
+  withFdSocket s pure
 #endif
 
 {# fun init as initialize_
@@ -209,14 +209,19 @@ bool2int :: Bool -> CInt
 bool2int True  = 1
 bool2int False = 0
 
-{# fun session_handshake as handshake_
-  { toPointer `Session', ssh2socket `Socket' } -> `Int' #}
+{# fun session_handshake
+ { `Ptr ()', `CInt' } -> `Int' #}
+
+handshake_ :: Session -> Socket -> IO Int
+handshake_ session socket = do
+  session_handshake (toPointer session) =<< ssh2socket socket
 
 -- | Run SSH handshake on network socket.
 handshake :: Session -> Socket -> IO ()
 handshake session socket = do
   sessionSetSocket session (Just socket)
-  void . handleInt (Just session) $ handshake_ session socket
+  void $ handleInt (Just session)
+       $ handshake_ session socket
 
 {# fun knownhost_init as initKnownHosts_
   { toPointer `Session' } -> `Ptr ()' id #}
@@ -543,7 +548,7 @@ pollChannelRead ch = do
   mbSocket <- sessionGetSocket (channelSession ch)
   case mbSocket of
     Nothing -> error "pollChannelRead without socket present"
-    Just socket -> isReadable socket
+    Just _ -> pure True
 
 --
 -- | Sftp support
