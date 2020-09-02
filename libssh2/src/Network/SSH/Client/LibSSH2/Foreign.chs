@@ -76,7 +76,11 @@ import Foreign hiding (void)
 import Foreign.C.Types
 import Foreign.C.String
 import System.IO
+#if MIN_VERSION_network(3,0,0)
+import Network.Socket (Socket, withFdSocket)
+#else
 import Network.Socket (Socket(MkSocket), isReadable)
+#endif
 import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Unsafe as BSS
 
@@ -144,6 +148,24 @@ init_crypto :: Bool -> CInt
 init_crypto False = 1
 init_crypto True  = 0
 
+#if MIN_VERSION_network(3,0,0)
+ssh2socket :: Socket
+#ifdef mingw32_HOST_OS
+    #ifdef x86_64_HOST_ARCH
+           -> CULLong
+    #else
+           -> IO CUInt
+    #endif
+#else
+           -> IO CInt
+#endif
+ssh2socket s =
+#ifdef mingw32_HOST_OS
+  fromIntegral <$> withFdSocket s pure
+#else
+  withFdSocket s pure
+#endif
+#else
 ssh2socket :: Socket
 #ifdef mingw32_HOST_OS
     #ifdef x86_64_HOST_ARCH
@@ -153,13 +175,15 @@ ssh2socket :: Socket
     #endif
 #else
            -> CInt
-#endif
+#endif /* mingw32_HOST_OS */
 ssh2socket (MkSocket s _ _ _ _) =
 #ifdef mingw32_HOST_OS
   (fromIntegral s)
 #else
   s
 #endif
+
+#endif /* MIN_VERSION_network(3,0,0) */
 
 {# fun init as initialize_
   { init_crypto `Bool' } -> `Int' #}
@@ -209,14 +233,24 @@ bool2int :: Bool -> CInt
 bool2int True  = 1
 bool2int False = 0
 
+#if MIN_VERSION_network(3,0,0)
+{# fun session_handshake
+  { `Ptr ()', `CInt' } -> `Int' #}
+
+handshake_ :: Session -> Socket -> IO Int
+handshake_ session socket = do
+  session_handshake (toPointer session) =<< ssh2socket socket
+#else
 {# fun session_handshake as handshake_
   { toPointer `Session', ssh2socket `Socket' } -> `Int' #}
+#endif
 
 -- | Run SSH handshake on network socket.
 handshake :: Session -> Socket -> IO ()
 handshake session socket = do
   sessionSetSocket session (Just socket)
-  void . handleInt (Just session) $ handshake_ session socket
+  void $ handleInt (Just session)
+       $ handshake_ session socket
 
 {# fun knownhost_init as initKnownHosts_
   { toPointer `Session' } -> `Ptr ()' id #}
@@ -543,7 +577,11 @@ pollChannelRead ch = do
   mbSocket <- sessionGetSocket (channelSession ch)
   case mbSocket of
     Nothing -> error "pollChannelRead without socket present"
+#if MIN_VERSION_network(3,0,0)
+    Just _ -> pure True
+#else
     Just socket -> isReadable socket
+#endif
 
 --
 -- | Sftp support
