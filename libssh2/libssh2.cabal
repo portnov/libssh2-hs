@@ -40,7 +40,7 @@ Build-type:          Simple
 Extra-source-files:  ssh-client.hs, Makefile, include/libssh2_local.h
 
 -- Constraint on the version of Cabal needed to build this package.
-Cabal-version:       >=1.8
+Cabal-version:       >=1.10
 
 flag gcrypt
   description: add hack that allows to run threaded program when libssh2 is built against gcrypt
