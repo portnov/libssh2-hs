@@ -1,6 +1,6 @@
 Name:                libssh2
 
-Version:             0.2.0.7
+Version:             0.2.0.8
 
 Synopsis:            FFI bindings to libssh2 SSH2 client library (http://libssh2.org/)
 
