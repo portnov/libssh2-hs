@@ -69,6 +69,7 @@ Library
   Extra-libraries:     "ssh2"
   pkgconfig-depends:   libssh2 >= 1.2.8
   GHC-Options:         -Wall
+  Default-Language: Haskell2010
 
   -- Other-modules:
 
@@ -88,6 +89,7 @@ Executable hs-ssh-client
     buildable: False
   Main-Is: ssh-client.hs
   GHC-Options: -threaded
+  Default-Language: Haskell2010
 
 Source-repository head
   type: git
