@@ -33,7 +33,7 @@ module Network.SSH.Client.LibSSH2.Foreign
    -- * Channel functions
    openChannelSession, closeChannel, freeChannel,
    channelSendEOF, channelWaitEOF, channelIsEOF,
-   readChannel, writeChannel,
+   readChannel, readChannelStderr, writeChannel,
    writeChannelFromHandle, readChannelToHandle,
    channelProcess, channelExecute, channelShell,
    requestPTY, requestPTYEx,
@@ -385,6 +385,12 @@ readChannel :: Channel         --
             -> Size             -- ^ Amount of data to read
             -> IO BSS.ByteString
 readChannel c sz = readChannelEx c 0 sz
+
+-- | Read data from channel.
+readChannelStderr :: Channel         --
+                  -> Size             -- ^ Amount of data to read
+                  -> IO BSS.ByteString
+readChannelStderr c sz = readChannelEx c {#const SSH_EXTENDED_DATA_STDERR#} sz
 
 -- | Write data to channel.
 writeChannel :: Channel -> BSS.ByteString -> IO ()
