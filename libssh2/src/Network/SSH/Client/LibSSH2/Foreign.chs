@@ -19,6 +19,7 @@ module Network.SSH.Client.LibSSH2.Foreign
    -- * Session functions
    initialize, exit,
    initSession, freeSession, disconnectSession,
+   keepaliveConfig,
    handshake,
    setBlocking,
 
@@ -225,6 +226,9 @@ disconnectSession :: Session
                   -> String  -- ^ Goodbye message
                   -> IO ()
 disconnectSession s msg = void . handleInt (Just s) $ disconnectSessionEx s 11 msg ""
+
+{# fun keepalive_config as keepaliveConfig
+  { toPointer `Session', bool2int `Bool', `Int' } -> `()' #}
 
 {# fun session_set_blocking as setBlocking
   { toPointer `Session', bool2int `Bool' } -> `()' #}
