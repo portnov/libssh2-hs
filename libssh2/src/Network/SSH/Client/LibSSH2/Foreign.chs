@@ -47,8 +47,8 @@ module Network.SSH.Client.LibSSH2.Foreign
    sftpOpenDir, sftpReadDir, sftpCloseHandle,
    sftpOpenFile,
    sftpRenameFile, sftpRenameFileEx,
-   sftpWriteFileFromHandler, sftpReadFileToHandler,
-   sftpFstat, sftpDeleteFile,
+   sftpWriteFileFromHandler, sftpWriteFileFromBytes,
+   sftpReadFileToHandler, sftpFstat, sftpDeleteFile,
 
    RenameFlag (..), SftpFileTransferFlags (..),
    SftpAttributes (..),
@@ -771,6 +771,24 @@ sftpWriteFileFromHandler sftph fh =
     bufferSize = 0x100000
 
   in allocaBytes bufferSize $ go 0
+
+-- | Upload bytes to the sftp server
+-- Returns size of sent data.
+sftpWriteFileFromBytes :: SftpHandle -> BSS.ByteString -> IO Integer
+sftpWriteFileFromBytes sftph bs = BSS.useAsCStringLen bs (uncurry (send 0))
+  where
+    send :: Int -> Ptr CChar -> Int -> IO Integer
+    send written _ 0 = pure (toInteger written)
+    send written src len = do
+      let nElements = min len (bufferSize `div` sizeOf (undefined :: CChar))
+      sent <- handleInt (Just sftph)
+                           $ {# call sftp_write #} (toPointer sftph)
+                                                   src
+                                                   (fromIntegral nElements)
+      send (written + fromIntegral sent) (advancePtr src written) (len - fromIntegral sent)
+
+    bufferSize :: Int
+    bufferSize = 0x100000
 
 data SftpAttributes = SftpAttributes {
   saFlags :: CULong,

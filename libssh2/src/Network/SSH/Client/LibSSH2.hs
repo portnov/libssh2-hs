@@ -27,6 +27,7 @@ module Network.SSH.Client.LibSSH2
    sftpListDir,
    sftpRenameFile,
    sftpSendFile, sftpSendFromHandle,
+   sftpSendBytes,
    sftpReceiveFile, sftpReadFileToHandler,
    sftpFstat,
    sftpDeleteFile,
@@ -346,6 +347,18 @@ sftpSendFromHandle sftp fh remote mode = do
   let flags = [FXF_WRITE, FXF_CREAT, FXF_TRUNC, FXF_EXCL]
   withOpenSftpFile sftp remote mode flags $ \sftph ->
     sftpWriteFileFromHandler sftph fh
+
+-- | Send bytes to a remote host via SFTP
+-- Returns the size of sent data.
+sftpSendBytes :: Sftp           -- ^ Opened sftp session
+              -> BSS.ByteString -- ^ Bytes to write
+              -> FilePath       -- ^ Remote file path
+              -> Int            -- ^ File creation mode (0o777, for example)
+              -> IO Integer
+sftpSendBytes sftp bytes remote mode = do
+  let flags = [FXF_WRITE, FXF_CREAT, FXF_TRUNC, FXF_EXCL]
+  withOpenSftpFile sftp remote mode flags $ \sftph ->
+    sftpWriteFileFromBytes sftph bytes
 
 -- | Received a file from remote host via SFTP
 -- Returns size of received data.
