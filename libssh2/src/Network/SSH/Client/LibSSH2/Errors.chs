@@ -190,9 +190,12 @@ threadWaitSession (Just ctx) = do
     Nothing -> error "EAGAIN thrown on session without socket"
     Just socket -> do
       dirs <- blockedDirections s
-      if (OUTBOUND `elem` dirs)
-        then threadWaitWrite socket
-        else threadWaitRead socket
+      case dirs of
+        [] -> pure ()
+        _ ->
+          if (OUTBOUND `elem` dirs)
+            then threadWaitWrite socket
+            else threadWaitRead socket
 
 -- | Sftp
 

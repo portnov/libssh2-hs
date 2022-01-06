@@ -140,6 +140,7 @@ data Direction = INBOUND | OUTBOUND
   deriving (Eq, Show)
 
 int2dir :: (Eq a, Num a, Show a) => a -> [Direction]
+int2dir 0 = []
 int2dir 1 = [INBOUND]
 int2dir 2 = [OUTBOUND]
 int2dir 3 = [INBOUND, OUTBOUND]
