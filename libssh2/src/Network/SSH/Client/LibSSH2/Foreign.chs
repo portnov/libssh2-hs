@@ -780,12 +780,12 @@ sftpWriteFileFromBytes sftph bs = BSS.useAsCStringLen bs (uncurry (send 0))
     send :: Int -> Ptr CChar -> Int -> IO Integer
     send written _ 0 = pure (toInteger written)
     send written src len = do
-      let nElements = min len (bufferSize `div` sizeOf (undefined :: CChar))
-      sent <- handleInt (Just sftph)
+      let nBytes = min len bufferSize
+      sent <- fmap fromIntegral . handleInt (Just sftph)
                            $ {# call sftp_write #} (toPointer sftph)
                                                    src
-                                                   (fromIntegral nElements)
-      send (written + fromIntegral sent) (advancePtr src written) (len - fromIntegral sent)
+                                                   (fromIntegral nBytes)
+      send (written + sent) (src `plusPtr` written) (len - sent)
 
     bufferSize :: Int
     bufferSize = 0x100000
