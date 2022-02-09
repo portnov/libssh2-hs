@@ -152,8 +152,8 @@ checkHost :: Session
 checkHost s host port path = do
   kh <- initKnownHosts s
   _numKnownHosts <- knownHostsReadFile kh path
-  (hostkey, _keylen, _keytype) <- getHostKey s
-  result <- checkKnownHost kh host port hostkey [TYPE_PLAIN, KEYENC_RAW]
+  (hostkey, _keytype) <- getHostKey s
+  result <- checkKnownHost kh host port hostkey [TYPE_PLAIN, KEYENC_RAW, KEY_RSA1, KEY_SSHRSA, KEY_SSHDSS]
   freeKnownHosts kh
   return result
 
