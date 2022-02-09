@@ -107,21 +107,31 @@ data KnownHostType =
   | KEY_RSA1
   | KEY_SSHRSA
   | KEY_SSHDSS
+  | KEY_ECDSA_256
+  | KEY_ECDSA_384
+  | KEY_ECDSA_521
+  | KEY_ED25519
+  | KEY_UNKNOWN
   deriving (Eq, Show)
 
 kht2int :: KnownHostType -> CInt
-kht2int TYPE_MASK   = 0xffff
-kht2int TYPE_PLAIN  = 1
-kht2int TYPE_SHA1   = 2
-kht2int TYPE_CUSTOM = 3
-kht2int KEYENC_MASK = 3 `shiftL` 16
-kht2int KEYENC_RAW  = 1 `shiftL` 16
+kht2int TYPE_MASK     = 0xffff
+kht2int TYPE_PLAIN    = 1
+kht2int TYPE_SHA1     = 2
+kht2int TYPE_CUSTOM   = 3
+kht2int KEYENC_MASK   = 3 `shiftL` 16
+kht2int KEYENC_RAW    = 1 `shiftL` 16
 kht2int KEYENC_BASE64 = 2 `shiftL` 16
-kht2int KEY_MASK    = 15 `shiftL` 18
-kht2int KEY_SHIFT   = 18
-kht2int KEY_RSA1    = 1 `shiftL` 18
-kht2int KEY_SSHRSA  = 2 `shiftL` 18
-kht2int KEY_SSHDSS  = 3 `shiftL` 18
+kht2int KEY_MASK      = 15 `shiftL` 18
+kht2int KEY_SHIFT     = 18
+kht2int KEY_RSA1      = 1 `shiftL` 18
+kht2int KEY_SSHRSA    = 2 `shiftL` 18
+kht2int KEY_SSHDSS    = 3 `shiftL` 18
+kht2int KEY_ECDSA_256 = 4 `shiftL` 18
+kht2int KEY_ECDSA_384 = 5 `shiftL` 18
+kht2int KEY_ECDSA_521 = 6 `shiftL` 18
+kht2int KEY_ED25519  = 7 `shiftL` 18
+kht2int KEY_UNKNOWN   = 15 `shiftL` 18
 
 int2kht :: CInt -> KnownHostType
 int2kht 0xffff = TYPE_MASK
@@ -130,13 +140,18 @@ int2kht 2      = TYPE_SHA1
 int2kht 3      = TYPE_CUSTOM
 int2kht 18     = KEY_SHIFT
 int2kht i
-  | i == 3 `shiftL` 16 = KEYENC_MASK
-  | i == 1 `shiftL` 16 = KEYENC_RAW
-  | i == 2 `shiftL` 16 = KEYENC_BASE64
+  | i == 3 `shiftL` 16  = KEYENC_MASK
+  | i == 1 `shiftL` 16  = KEYENC_RAW
+  | i == 2 `shiftL` 16  = KEYENC_BASE64
   | i == 15 `shiftL` 18 = KEY_MASK
-  | i == 1 `shiftL` 18 = KEY_RSA1
-  | i == 2 `shiftL` 18 = KEY_SSHRSA
-  | i == 3 `shiftL` 18 = KEY_SSHDSS
+  | i == 1 `shiftL` 18  = KEY_RSA1
+  | i == 2 `shiftL` 18  = KEY_SSHRSA
+  | i == 3 `shiftL` 18  = KEY_SSHDSS
+  | i == 4 `shiftL` 18  = KEY_ECDSA_256
+  | i == 5 `shiftL` 18  = KEY_ECDSA_384
+  | i == 6 `shiftL` 18  = KEY_ECDSA_521
+  | i == 7 `shiftL` 18  = KEY_ED25519
+  | i == 15 `shiftL` 18 = KEY_UNKNOWN
   | otherwise = error $ "Unsupported known host type: " ++ show i
 
 typemask2int :: [KnownHostType] -> CInt
