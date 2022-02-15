@@ -150,13 +150,14 @@ checkHost :: Session
           -> FilePath           -- ^ Path to known_hosts file
           -> [KnownHostType]    -- ^ Flags specifying what format the host name is, what format the key is and what key type it is
           -> IO KnownHostResult
-checkHost s host port path flags = do
-  kh <- initKnownHosts s
-  _numKnownHosts <- knownHostsReadFile kh path
-  (hostkey, _keytype) <- getHostKey s
-  result <- checkKnownHost kh host port hostkey flags
-  freeKnownHosts kh
-  return result
+checkHost s host port path flags = bracket
+  (initKnownHosts s)
+  freeKnownHosts
+  (\kh -> do
+    _numKnownHosts <- knownHostsReadFile kh path
+    (hostkey, _keytype) <- getHostKey s
+    checkKnownHost kh host port hostkey flags
+  )
 
 -- | Execute some actions withing SSH2 channel
 withChannel :: Session -> (Channel -> IO a) -> IO (Int, a)
