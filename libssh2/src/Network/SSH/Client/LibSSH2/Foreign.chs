@@ -126,6 +126,29 @@ kht2int KEY_SSHDSS  = 3 `shiftL` 18
 typemask2int :: [KnownHostType] -> CInt
 typemask2int list = foldr (.|.) 0 (map kht2int list)
 
+-- | Host key types. See libssh2 documentation.
+data HostKeyType =
+    UNKNOWN
+  | RSA
+  | DSS
+  | ECDSA_256
+  | ECDSA_384
+  | ECDSA_521
+  | ED25519
+  deriving (Enum, Eq, Ord)
+
+instance Show HostKeyType where
+  show UNKNOWN = "unknown"
+  show RSA = "ssh-rsa"
+  show DSS = "ssh-dss"
+  show ECDSA_256 = "ecdsa-sha2-nistp256"
+  show ECDSA_384 = "ecdsa-sha2-nistp384"
+  show ECDSA_521 = "ecdsa-sha2-nistp521"
+  show ED25519 = "ssh-ed25519"
+
+int2hkt :: Integral n => n -> HostKeyType
+int2hkt = toEnum . fromIntegral
+
 -- Result of matching host against known_hosts.
 data KnownHostResult =
     MATCH
@@ -276,15 +299,21 @@ knownHostsReadFile :: KnownHosts
                    -> IO Int
 knownHostsReadFile kh path = handleInt (Nothing :: Maybe Session) $ knownHostsReadFile_ kh path 1
 
--- | Get remote host public key
-{# fun session_hostkey as getHostKey
-  { toPointer `Session', alloca- `Size' peek*, alloca- `CInt' peek* } -> `String' #}
+{# fun session_hostkey as getHostKey_
+  { toPointer `Session', alloca- `Size' peek*, alloca- `CInt' peek* } -> `Ptr CChar' id #}
+
+-- | Get remote host public key and its type
+getHostKey :: Session -> IO (BSS.ByteString, HostKeyType)
+getHostKey session = do
+  (keyPtr, keySize, keyType) <- getHostKey_ session
+  key <- BSS.packCStringLen (keyPtr, fromIntegral keySize)
+  pure (key, int2hkt keyType)
 
 {# fun knownhost_checkp as checkKnownHost_
   { toPointer `KnownHosts',
     `String',
     `Int',
-    `String',
+    id `Ptr CChar',
     `Int',
     typemask2int `[KnownHostType]',
     castPtr `Ptr ()' } -> `KnownHostResult' int2khresult #}
@@ -293,10 +322,11 @@ knownHostsReadFile kh path = handleInt (Nothing :: Maybe Session) $ knownHostsRe
 checkKnownHost :: KnownHosts         --
                -> String             -- ^ Host name
                -> Int                -- ^ Port number (usually 22)
-               -> String             -- ^ Host public key
+               -> BSS.ByteString     -- ^ Host public key
                -> [KnownHostType]    -- ^ Host flags (see libssh2 documentation)
                -> IO KnownHostResult
-checkKnownHost kh host port key flags = checkKnownHost_ kh host port key (length key) flags nullPtr
+checkKnownHost kh host port key flags = BSS.useAsCStringLen key $ \(keyPtr, keySize) -> do
+  checkKnownHost_ kh host port keyPtr keySize flags nullPtr
 
 -- TODO: I don't see the '&' in the libssh2 docs?
 {# fun userauth_publickey_fromfile_ex as publicKeyAuthFile_
