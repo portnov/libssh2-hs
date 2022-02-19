@@ -74,7 +74,7 @@ withSSH2 :: FilePath          -- ^ Path to known_hosts file
          -> IO a
 withSSH2 known_hosts public private passphrase login hostname port fn =
   withSession hostname port $ \s -> do
-    r <- checkHost s hostname port known_hosts
+    r <- checkHost s hostname port known_hosts [TYPE_MASK]
     when (r == MISMATCH) $
       error $ "Host key mismatch for host " ++ hostname
     publicKeyAuthFile s login public private passphrase
@@ -90,7 +90,7 @@ withSSH2Agent :: String            -- ^ Path to known_hosts file
               -> IO a
 withSSH2Agent known_hosts login hostname port fn =
   withSession hostname port $ \s -> do
-    r <- checkHost s hostname port known_hosts
+    r <- checkHost s hostname port known_hosts [TYPE_MASK]
     when (r == MISMATCH) $
       error $ "host key mismatch for host " ++ hostname
     E.bracket (agentInit s) agentFree $ \a ->
@@ -112,7 +112,7 @@ withSSH2User :: FilePath          -- ^ Path to known_hosts file
          -> IO a
 withSSH2User known_hosts login password hostname port fn =
   withSession hostname port $ \s -> do
-    r <- checkHost s hostname port known_hosts
+    r <- checkHost s hostname port known_hosts [TYPE_MASK]
     when (r == MISMATCH) $
       error $ "Host key mismatch for host " ++ hostname
     usernamePasswordAuth s login password
@@ -148,12 +148,13 @@ checkHost :: Session
           -> String             -- ^ Remote host name
           -> Int                -- ^ Remote port number (usually 22)
           -> FilePath           -- ^ Path to known_hosts file
+          -> [KnownHostType]    -- ^ Flags specifying what format the host name is, what format the key is and what key type it is
           -> IO KnownHostResult
-checkHost s host port path = do
+checkHost s host port path flags = do
   kh <- initKnownHosts s
   _numKnownHosts <- knownHostsReadFile kh path
-  (hostkey, _keylen, _keytype) <- getHostKey s
-  result <- checkKnownHost kh host port hostkey [TYPE_PLAIN, KEYENC_RAW]
+  (hostkey, _keytype) <- getHostKey s
+  result <- checkKnownHost kh host port hostkey flags
   freeKnownHosts kh
   return result
 
@@ -268,7 +269,7 @@ withSFTP :: FilePath          -- ^ Path to known_hosts file
          -> IO a
 withSFTP known_hosts public private passphrase login hostname port fn =
   withSession hostname port $ \s -> do
-    r <- checkHost s hostname port known_hosts
+    r <- checkHost s hostname port known_hosts [TYPE_MASK]
     when (r == MISMATCH) $
       error $ "Host key mismatch for host " ++ hostname
     publicKeyAuthFile s login public private passphrase
@@ -285,7 +286,7 @@ withSFTPUser :: FilePath          -- ^ Path to known_hosts file
              -> IO a
 withSFTPUser known_hosts login password hostname port fn =
   withSession hostname port $ \s -> do
-    r <- checkHost s hostname port known_hosts
+    r <- checkHost s hostname port known_hosts [TYPE_MASK]
     when (r == MISMATCH) $
       error $ "Host key mismatch for host " ++ hostname
     usernamePasswordAuth s login password
