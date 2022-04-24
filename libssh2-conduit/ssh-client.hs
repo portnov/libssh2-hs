@@ -25,7 +25,7 @@ ssh login host port command = do
       public = home </> ".ssh" </> "id_rsa.pub"
       private = home </> ".ssh" </> "id_rsa"
   withSession host port $ \session -> do
-    r <- checkHost session host port known_hosts
+    r <- checkHost session host port known_hosts [TYPE_MASK]
     publicKeyAuthFile session login public private ""
     (Just ch, !src) <- execCommand True session command
     hSetBuffering stdout NoBuffering
