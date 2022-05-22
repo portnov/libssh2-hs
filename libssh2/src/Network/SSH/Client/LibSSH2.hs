@@ -27,6 +27,7 @@ module Network.SSH.Client.LibSSH2
    sftpListDir,
    sftpRenameFile,
    sftpSendFile, sftpSendFromHandle,
+   sftpSendBytes,
    sftpReceiveFile, sftpReadFileToHandler,
    sftpFstat,
    sftpDeleteFile,
@@ -73,7 +74,7 @@ withSSH2 :: FilePath          -- ^ Path to known_hosts file
          -> IO a
 withSSH2 known_hosts public private passphrase login hostname port fn =
   withSession hostname port $ \s -> do
-    r <- checkHost s hostname port known_hosts
+    r <- checkHost s hostname port known_hosts [TYPE_MASK]
     when (r == MISMATCH) $
       error $ "Host key mismatch for host " ++ hostname
     publicKeyAuthFile s login public private passphrase
@@ -89,7 +90,7 @@ withSSH2Agent :: String            -- ^ Path to known_hosts file
               -> IO a
 withSSH2Agent known_hosts login hostname port fn =
   withSession hostname port $ \s -> do
-    r <- checkHost s hostname port known_hosts
+    r <- checkHost s hostname port known_hosts [TYPE_MASK]
     when (r == MISMATCH) $
       error $ "host key mismatch for host " ++ hostname
     E.bracket (agentInit s) agentFree $ \a ->
@@ -111,7 +112,7 @@ withSSH2User :: FilePath          -- ^ Path to known_hosts file
          -> IO a
 withSSH2User known_hosts login password hostname port fn =
   withSession hostname port $ \s -> do
-    r <- checkHost s hostname port known_hosts
+    r <- checkHost s hostname port known_hosts [TYPE_MASK]
     when (r == MISMATCH) $
       error $ "Host key mismatch for host " ++ hostname
     usernamePasswordAuth s login password
@@ -147,14 +148,16 @@ checkHost :: Session
           -> String             -- ^ Remote host name
           -> Int                -- ^ Remote port number (usually 22)
           -> FilePath           -- ^ Path to known_hosts file
+          -> [KnownHostType]    -- ^ Flags specifying what format the host name is, what format the key is and what key type it is
           -> IO KnownHostResult
-checkHost s host port path = do
-  kh <- initKnownHosts s
-  _numKnownHosts <- knownHostsReadFile kh path
-  (hostkey, _keylen, _keytype) <- getHostKey s
-  result <- checkKnownHost kh host port hostkey [TYPE_PLAIN, KEYENC_RAW]
-  freeKnownHosts kh
-  return result
+checkHost s host port path flags = bracket
+  (initKnownHosts s)
+  freeKnownHosts
+  (\kh -> do
+    _numKnownHosts <- knownHostsReadFile kh path
+    (hostkey, _keytype) <- getHostKey s
+    checkKnownHost kh host port hostkey flags
+  )
 
 -- | Execute some actions withing SSH2 channel
 withChannel :: Session -> (Channel -> IO a) -> IO (Int, a)
@@ -267,7 +270,7 @@ withSFTP :: FilePath          -- ^ Path to known_hosts file
          -> IO a
 withSFTP known_hosts public private passphrase login hostname port fn =
   withSession hostname port $ \s -> do
-    r <- checkHost s hostname port known_hosts
+    r <- checkHost s hostname port known_hosts [TYPE_MASK]
     when (r == MISMATCH) $
       error $ "Host key mismatch for host " ++ hostname
     publicKeyAuthFile s login public private passphrase
@@ -284,7 +287,7 @@ withSFTPUser :: FilePath          -- ^ Path to known_hosts file
              -> IO a
 withSFTPUser known_hosts login password hostname port fn =
   withSession hostname port $ \s -> do
-    r <- checkHost s hostname port known_hosts
+    r <- checkHost s hostname port known_hosts [TYPE_MASK]
     when (r == MISMATCH) $
       error $ "Host key mismatch for host " ++ hostname
     usernamePasswordAuth s login password
@@ -346,6 +349,18 @@ sftpSendFromHandle sftp fh remote mode = do
   let flags = [FXF_WRITE, FXF_CREAT, FXF_TRUNC, FXF_EXCL]
   withOpenSftpFile sftp remote mode flags $ \sftph ->
     sftpWriteFileFromHandler sftph fh
+
+-- | Send bytes to a remote host via SFTP
+-- Returns the size of sent data.
+sftpSendBytes :: Sftp           -- ^ Opened sftp session
+              -> BSS.ByteString -- ^ Bytes to write
+              -> FilePath       -- ^ Remote file path
+              -> Int            -- ^ File creation mode (0o777, for example)
+              -> IO Integer
+sftpSendBytes sftp bytes remote mode = do
+  let flags = [FXF_WRITE, FXF_CREAT, FXF_TRUNC, FXF_EXCL]
+  withOpenSftpFile sftp remote mode flags $ \sftph ->
+    sftpWriteFileFromBytes sftph bytes
 
 -- | Received a file from remote host via SFTP
 -- Returns size of received data.

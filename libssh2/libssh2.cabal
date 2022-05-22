@@ -40,7 +40,7 @@ Build-type:          Simple
 Extra-source-files:  ssh-client.hs, Makefile, include/libssh2_local.h
 
 -- Constraint on the version of Cabal needed to build this package.
-Cabal-version:       >=1.8
+Cabal-version:       >=1.10
 
 flag gcrypt
   description: add hack that allows to run threaded program when libssh2 is built against gcrypt
@@ -59,16 +59,22 @@ Library
 
   Include-dirs:        include
   Includes:            include/libssh2_local.h
-
+  if os(mingw32) && arch(x86_64)
+    cpp-options: -Dx86_64_HOST_ARCH
+  
+  -- Everything else is some form of Unix
+  if !os(mingw32)
+    build-depends: unix
+  
   Build-depends:       base >= 4 && < 5,
                        network >= 2.3 && < 3.2,
                        syb >= 0.3.3, time >= 1.2,
-                       bytestring >= 0.9,
-                       unix
+                       bytestring >= 0.9
 
   Extra-libraries:     "ssh2"
   pkgconfig-depends:   libssh2 >= 1.2.8
   GHC-Options:         -Wall
+  Default-Language: Haskell2010
 
   -- Other-modules:
 
@@ -88,6 +94,7 @@ Executable hs-ssh-client
     buildable: False
   Main-Is: ssh-client.hs
   GHC-Options: -threaded
+  Default-Language: Haskell2010
 
 Source-repository head
   type: git
