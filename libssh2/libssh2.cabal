@@ -59,12 +59,17 @@ Library
 
   Include-dirs:        include
   Includes:            include/libssh2_local.h
-
+  if os(mingw32) && arch(x86_64)
+    cpp-options: -Dx86_64_HOST_ARCH
+  
+  -- Everything else is some form of Unix
+  if !os(mingw32)
+    build-depends: unix
+  
   Build-depends:       base >= 4 && < 5,
                        network >= 2.3 && < 3.3,
                        syb >= 0.3.3, time >= 1.2,
-                       bytestring >= 0.9,
-                       unix
+                       bytestring >= 0.9
 
   Extra-libraries:     "ssh2"
   pkgconfig-depends:   libssh2 >= 1.2.8
