@@ -846,7 +846,7 @@ sftpWriteFileFromBytes sftph bs = BSS.useAsCStringLen bs (uncurry (send 0))
                            $ {# call sftp_write #} (toPointer sftph)
                                                    src
                                                    (fromIntegral nBytes)
-      send (written + sent) (src `plusPtr` written) (len - sent)
+      send (written + sent) (src `plusPtr` sent) (len - sent)
 
     bufferSize :: Int
     bufferSize = 0x100000
