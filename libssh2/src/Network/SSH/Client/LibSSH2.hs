@@ -48,6 +48,7 @@ import qualified Data.ByteString.Lazy as BSL
 
 import Network.SSH.Client.LibSSH2.Types
 import Network.SSH.Client.LibSSH2.Foreign
+import Network.SSH.Client.LibSSH2.Errors (ErrorCode)
 
 -- | Similar to Network.connectTo, but does not socketToHandle.
 socketConnect :: String -> Int -> IO Socket
@@ -131,13 +132,14 @@ sessionInit hostname port = do
       sock <- socketConnect hostname port
       session <- initSession
       setBlocking session False
-      handshake session sock
-      return session
+      hs <- E.try (handshake session sock)
+      case hs of
+        Right () -> pure session
+        Left e -> sessionClose session >> E.throw (e :: ErrorCode)
 
 --  | Close active session
 sessionClose :: Session -> IO ()
-sessionClose session = do
-      disconnectSession session "Done."
+sessionClose session = disconnectSession session "Done." `E.finally` do
       sessionGetSocket session >>= maybe (pure ()) close
       freeSession session
 
