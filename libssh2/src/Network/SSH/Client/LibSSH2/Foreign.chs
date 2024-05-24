@@ -93,6 +93,17 @@ import Network.SSH.Client.LibSSH2.Errors
 import Network.SSH.Client.LibSSH2.GCrypt
 #endif
 
+-- What machine type represents a Socket in this OS.
+#ifdef mingw32_HOST_OS
+#ifdef x86_64_HOST_ARCH
+type MachineSock = CULLong
+#else /* x86_64_HOST_ARCH */
+type MachineSock = CUInt
+#endif
+#else /* mingw32_HOST_OS */
+type MachineSock = CInt
+#endif
+
 -- Known host flags. See libssh2 documentation.
 data KnownHostType =
     TYPE_MASK
@@ -204,16 +215,7 @@ init_crypto False = 1
 init_crypto True  = 0
 
 #if MIN_VERSION_network(3,0,0)
-ssh2socket :: Socket
-#ifdef mingw32_HOST_OS
-    #ifdef x86_64_HOST_ARCH
-           -> CULLong
-    #else
-           -> IO CUInt
-    #endif
-#else
-           -> IO CInt
-#endif
+ssh2socket :: Socket -> IO MachineSock
 ssh2socket s =
 #ifdef mingw32_HOST_OS
   fromIntegral <$> withFdSocket s pure
@@ -221,16 +223,7 @@ ssh2socket s =
   withFdSocket s pure
 #endif
 #else
-ssh2socket :: Socket
-#ifdef mingw32_HOST_OS
-    #ifdef x86_64_HOST_ARCH
-           -> CULLong
-    #else
-           -> CUInt
-    #endif
-#else
-           -> CInt
-#endif /* mingw32_HOST_OS */
+ssh2socket :: Socket -> MachineSock
 ssh2socket (MkSocket s _ _ _ _) =
 #ifdef mingw32_HOST_OS
   (fromIntegral s)
@@ -292,8 +285,10 @@ bool2int True  = 1
 bool2int False = 0
 
 #if MIN_VERSION_network(3,0,0)
+-- We use the id function for marshalling because c2hs can't convert type aliases,
+-- but the id function can
 {# fun session_handshake
-  { `Ptr ()', `CInt' } -> `Int' #}
+  { `Ptr ()', id `MachineSock' } -> `Int' #}
 
 handshake_ :: Session -> Socket -> IO Int
 handshake_ session socket = do
