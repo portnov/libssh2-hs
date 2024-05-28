@@ -250,13 +250,12 @@ withChannelBy :: IO a            -- ^ Create a channel (and possibly other stuff
               -> (a -> Channel)  -- ^ Extract the channel from "other stuff"
               -> (a -> IO b)     -- ^ Actions to execute on the channel
               -> IO (Int, b)     -- ^ Channel exit status and return value
-withChannelBy createChannel extractChannel actions = do
-  stuff <- createChannel
+withChannelBy createChannel extractChannel actions =
+  bracket createChannel (freeChannel . extractChannel) $ \stuff -> do
   let ch = extractChannel stuff
   result <- actions stuff
   closeChannel ch
   exitStatus <- channelExitStatus ch
-  freeChannel ch
   return (exitStatus, result)
 
 -- | Execute some actions within SFTP connection.
