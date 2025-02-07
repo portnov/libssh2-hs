@@ -67,7 +67,7 @@ Library
     build-depends: unix
   
   Build-depends:       base >= 4 && < 5,
-                       network >= 2.3 && < 3.2,
+                       network >= 2.3 && < 3.3,
                        syb >= 0.3.3, time >= 1.2,
                        bytestring >= 0.9
 
