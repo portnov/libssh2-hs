@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ForeignFunctionInterface #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface, BangPatterns #-}
 
 #ifdef __APPLE__
 #define _ANSI_SOURCE
@@ -773,29 +773,24 @@ sftpRenameFileEx sftp src dest flags =
          {# call sftp_rename_ex #} (toPointer sftp) srcP (toEnum srcL) destP (toEnum destL) (renameFlag2int flags )
 
 -- | Download file from the sftp server
-sftpReadFileToHandler :: SftpHandle -> Handle -> Int -> IO Int
-sftpReadFileToHandler sftph fh fileSize =
+sftpReadFileToHandler :: SftpHandle -> Handle -> IO Int
+sftpReadFileToHandler sftph fh =
   let
-    go :: Int -> Ptr a -> IO Int
-    go received buffer = do
-      let toRead :: Int
-          toRead = min (fromIntegral fileSize - received) bufferSize
-      sz <- receive toRead buffer 0
-      _ <- hPutBuf fh buffer sz
-      let newreceived :: Int
-          newreceived = (received + fromIntegral sz)
-      if newreceived < fromIntegral fileSize
-         then go newreceived buffer
-         else return $ fromIntegral newreceived
+    go :: Int -> Ptr CChar -> IO Int
+    go !received buffer = do
+      sz <- receive bufferSize buffer
+      if sz == 0
+        then return received
+        else do
+          hPutBuf fh buffer (fromIntegral sz)
+          go (received + fromIntegral sz) buffer
 
-    receive :: Int -> Ptr a -> Int -> IO Int
-    receive 0 _ read_sz = return read_sz
-    receive toread buf alreadyread = do
-       received <- handleInt (Just sftph)
+    receive 0 _ = return 0
+    receive toread buf = do
+       handleInt (Just sftph)
                        $ {# call sftp_read #} (toPointer sftph)
-                                              (buf `plusPtr` alreadyread)
+                                              buf
                                               (fromIntegral toread)
-       receive (toread - fromIntegral received) buf (alreadyread + fromIntegral received)
 
     bufferSize = 0x100000
 

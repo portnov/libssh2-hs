@@ -381,8 +381,7 @@ sftpReceiveToHandle :: Sftp      -- ^ Opened sftp session
                     -> IO Integer
 sftpReceiveToHandle sftp remote fh = do
   result <- withOpenSftpFile sftp remote 0 [FXF_READ] $ \sftph -> do
-    fstat <- sftpFstat sftph
-    sftpReadFileToHandler sftph fh (fromIntegral $ saFileSize fstat)
+    sftpReadFileToHandler sftph fh
   return $ fromIntegral result
 
 withOpenSftpFile :: Sftp
